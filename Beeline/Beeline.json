@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "New: on foot (short trips, cities), Beeline uses Peloton if your job has it and it's ready, otherwise Sprint (can be turned off). Mounting is also more reliable right after an instant action, and Beeline never summons a mount while something else is already mounting you (auto-mount plugins)."
+  "Changelog": "Fix for flying zones and auto-mount plugins (Daily Routines...): Beeline could mount, get dismounted, mount again and turn back before taking off. Now, after a teleport or aethernet hop, Beeline gives auto-mount plugins a moment first and uses whatever mount you end up on; it never casts Mount Roulette again once you've been mounted; and when you're going to fly, the flying path is prepared while the mount is summoned, then you take off straight toward the spot. If mounting fails, you go on foot instead of waiting. Running speed is no longer learned from trips where Sprint or Peloton was used."
 }

@@ -331,6 +331,10 @@ internal sealed unsafe class Travel : IDisposable
         _mountTries = 0;
         _mountAttempts = 0;
         _speedTries = 0;
+        _mountDelayMs = _justArrived ? 1500 : 0;
+        _justArrived = false;
+        _usedBoost = player is Dalamud.Game.ClientState.Objects.Types.IBattleChara bc
+                     && bc.StatusList.Any(st => st.StatusId is SprintStatus or PelotonStatus);
         _sawFlying = fly;
         _sawMounted = Plugin.Condition[ConditionFlag.Mounted];
     }
@@ -342,6 +346,9 @@ internal sealed unsafe class Travel : IDisposable
     private bool _sawFlying, _sawMounted;
     private int _mountAttempts;   // calls refused by the game (e.g. just after an instant action)
     private int _speedTries;
+    private bool _usedBoost;      // Sprint/Peloton used on this move: don't learn running speed from it
+    private long _mountDelayMs;   // after a teleport / aethernet hop, give auto-mount plugins a moment first
+    private bool _justArrived;    // this move starts right after a teleport / aethernet hop
 
     private const uint PelotonAction = 7557, SprintGeneralAction = 4;
     private const uint SprintStatus = 50, PelotonStatus = 1199;
@@ -368,6 +375,8 @@ internal sealed unsafe class Travel : IDisposable
             return;
         switch (_moveMode)
         {
+            case MoveMode.Run when _usedBoost:
+                return; // Sprint / Peloton: not your normal running speed
             case MoveMode.Run:  Config.RunSpeed  = Blend(Config.RunSpeed,  Config.RunSamples++,  speed); break;
             case MoveMode.Ride: Config.RideSpeed = Blend(Config.RideSpeed, Config.RideSamples++, speed); break;
             case MoveMode.Fly:  Config.FlySpeed  = Blend(Config.FlySpeed,  Config.FlySamples++,  speed); break;
@@ -455,6 +464,7 @@ internal sealed unsafe class Travel : IDisposable
                     Stop();
                     return;
                 }
+                _justArrived = _arrival != null; // came by teleport / aethernet (a zone change for auto-mount plugins)
                 SetPhase(Phase.WaitMesh);
                 return;
             }
@@ -468,10 +478,12 @@ internal sealed unsafe class Travel : IDisposable
                 if (!ready) return;
 
                 var here = Plugin.ClientState.TerritoryType;
-                var fly = Config.AllowFlying && c[ConditionFlag.Mounted] && CanFly(here);
-                // Far away: summon a mount on the way (you keep moving while it's summoned).
+                // Far away: summon a mount (on the way, or right here before taking off).
                 var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.RidingPillion] && !c[ConditionFlag.InCombat] && CanMount(here)
                                 && Vector2.Distance(Flat(player!.Position), _target) > Config.MountDistance;
+                // Flying zone: ask for the flying path right away. vnavmesh waits in place until you're mounted, then
+                // takes off, so the path is computed while the mount is summoned (no re-planning mid-way, no going back).
+                var fly = Config.AllowFlying && CanFly(here) && (c[ConditionFlag.Mounted] || wantMount);
                 // The marker's NPC/object is already loaded: walk right up to it.
                 if (FindMarkerObject() is { } obj)
                 {
@@ -519,13 +531,18 @@ internal sealed unsafe class Travel : IDisposable
                     // Something else is already mounting you (another plugin's auto-mount, or you): leave it alone.
                     var mountingNow = c[ConditionFlag.Casting] || c[ConditionFlag.Casting87] || c[ConditionFlag.Mounting]
                                       || c[ConditionFlag.Mounting71] || c[ConditionFlag.MountOrOrnamentTransition];
+                    if (mounted && !_sawMounted)
+                        Plugin.Info($"{Plugin.Tag} Mounted {(_mountTries > 0 ? "by Beeline" : "by something else (another plugin or you)")}");
                     _sawMounted |= mounted;
                     _sawFlying |= c[ConditionFlag.InFlight];
 
                     // Mount Roulette on the way: once, and once more after 2.5 s if it didn't take. A call the game
                     // refuses (e.g. right after an instant action) doesn't count; give up after ~3 s of refusals.
-                    if (_wantMount && !mounted && !mountingNow && !c[ConditionFlag.InCombat] && _mountAttempts < 30
-                        && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500)))
+                    // Never once you've been mounted on this move: Mount Roulette while mounted would dismount you.
+                    if (_wantMount && !mounted && !_sawMounted && !mountingNow && !c[ConditionFlag.InCombat]
+                        && !c[ConditionFlag.InFlight] && !c[ConditionFlag.Jumping61] && _mountAttempts < 30
+                        && ((_mountTries == 0 && _moveTime.ElapsedMilliseconds >= _mountDelayMs)
+                            || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500 + _mountDelayMs)))
                     {
                         if (ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9))
                             _mountTries++;
@@ -547,17 +564,30 @@ internal sealed unsafe class Travel : IDisposable
                         if (used)
                         {
                             _speedTries = 10;
+                            _usedBoost = true;
                             Plugin.Info($"{Plugin.Tag} Used a speed boost (Peloton or Sprint)");
                         }
                     }
 
-                    // Mounted in a zone where you can fly: take off and fly the rest of the way.
+                    // Waiting on a flying path but the mount never came (refused, combat...): go on foot instead.
+                    if (_flying && !mounted && !_sawMounted && !mountingNow && _phaseTime.ElapsedMilliseconds > 6000)
+                    {
+                        _flying = false;
+                        _wantMount = false;
+                        Plugin.Info($"{Plugin.Tag} Couldn't mount: going on foot");
+                        try { SendMove(false); } catch { /* vnavmesh gone */ }
+                        _phaseTime.Restart();
+                        return;
+                    }
+
+                    // Mounted by something else mid-way in a zone where you can fly: switch to flying. Stop first, so
+                    // the new path starts from where you are (otherwise you keep going while it's computed, then turn back).
                     if (mounted && !_flying && Config.AllowFlying && CanFly(Plugin.ClientState.TerritoryType)
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > Config.MountDistance / 2f)
                     {
                         _flying = true;
                         Plugin.Info($"{Plugin.Tag} Mounted: flying the rest of the way");
-                        try { SendMove(true); } catch { /* vnavmesh gone */ }
+                        try { _p.Ipc.NavStop(); SendMove(true); } catch { /* vnavmesh gone */ }
                         _phaseTime.Restart(); // the new path takes a moment to start
                         return;
                     }
