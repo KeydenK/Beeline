@@ -95,13 +95,26 @@ internal sealed class ConfigWindow : Window
 
         using var disabled = ImRaii.Disabled(!on);
 
+        // ---- Controller ----
         var b = Config.Button;
-        if (ButtonCombo("Controller button", ref b))
+        if (PadCombo("Controller button", ref b, allowNone: false))
         {
             Config.Button = b;
             _plugin.SaveConfig();
         }
+        ImGui.SameLine();
+        var hold = Config.ButtonHold;
+        if (PadCombo("##hold", ref hold, allowNone: true, noneLabel: "no combo", prefix: "hold "))
+        {
+            Config.ButtonHold = hold;
+            _plugin.SaveConfig();
+        }
+        if (Config.Button is GamepadButtons.West or GamepadButtons.East && Config.ButtonHold == GamepadButtons.None)
+            Hint("Careful: on the map, Square / X and Circle / B close it. Use a combo, or another button.");
+        else if (Config.Button == GamepadButtons.North && Config.ButtonHold == GamepadButtons.None)
+            Hint("Careful: on the map, Triangle / Y changes the map (city / region). Use a combo, or another button.");
 
+        // ---- Mouse ----
         ImGui.SetNextItemWidth(160 * ImGuiHelpers.GlobalScale);
         using (var combo = ImRaii.Combo("Mouse button", Plugin.MouseName(Config.MouseButton)))
         {
@@ -113,23 +126,21 @@ internal sealed class ConfigWindow : Window
                         _plugin.SaveConfig();
                     }
         }
-
         if (Config.MouseButton != MouseTrigger.Off)
         {
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(90 * ImGuiHelpers.GlobalScale);
-            using var mod = ImRaii.Combo("##modifier", Config.MouseModifier == KeyModifier.None ? "no key" : "+ " + Config.MouseModifier);
-            if (mod)
-                foreach (var m in Enum.GetValues<KeyModifier>())
-                    if (ImGui.Selectable(m == KeyModifier.None ? "no key" : "+ " + m, m == Config.MouseModifier))
-                    {
-                        Config.MouseModifier = m;
-                        _plugin.SaveConfig();
-                    }
+            var mm = Config.MouseMods;
+            if (ModsCheckboxes("mouse", ref mm))
+            {
+                Config.MouseMods = mm;
+                _plugin.SaveConfig();
+            }
         }
-        if (Config.MouseButton is MouseTrigger.Left or MouseTrigger.Right && Config.MouseModifier == KeyModifier.None)
+        if (Config.MouseButton == MouseTrigger.Middle && Config.MouseMods == KeyMods.None)
+            Hint("Careful: middle click is auto-run in game. Add Ctrl, Shift or Alt, or pick another button.");
+        else if (Config.MouseButton is MouseTrigger.Left or MouseTrigger.Right && Config.MouseMods == KeyMods.None)
             Hint("The map also uses this click (left click on an aetheryte opens the teleport window, right click opens a menu). Ctrl + left click avoids that, and Lifestream ignores Ctrl clicks.");
 
+        // ---- Keyboard ----
         ImGui.SetNextItemWidth(160 * ImGuiHelpers.GlobalScale);
         using (var combo = ImRaii.Combo("Keyboard key", KeyName(Config.Hotkey)))
         {
@@ -154,9 +165,16 @@ internal sealed class ConfigWindow : Window
                 }
             }
         }
+        if (Config.Hotkey != VirtualKey.NO_KEY)
+        {
+            var km = Config.HotkeyMods;
+            if (ModsCheckboxes("key", ref km))
+            {
+                Config.HotkeyMods = km;
+                _plugin.SaveConfig();
+            }
+        }
         Hint("Mouse and keyboard: point at the spot on the map with the mouse, then click / press. Pick a key the game doesn't use, or it will do both.");
-        if (Config.Button == GamepadButtons.South || Config.Button == GamepadButtons.East)
-            Hint("This may also be the game's confirm/cancel button on the map; Square / X or Triangle / Y avoids clashes.");
 
         Hint("On an aetheryte or an aethernet shard: go there (aethernet if you are on that city's network, otherwise teleport).\n"
            + "Anywhere else (quest marker, NPC, object, any spot, any zone): the quickest way is used (no map flag is placed): going directly, the aethernet, or a teleport to the closest aetheryte, then vnavmesh does the rest. Moving your character cancels the trip.");
@@ -267,18 +285,41 @@ internal sealed class ConfigWindow : Window
 
     private static string KeyName(VirtualKey k) => k == VirtualKey.NO_KEY ? "None" : k.GetFancyName();
 
-    private static bool ButtonCombo(string label, ref GamepadButtons value)
+    private static bool PadCombo(string label, ref GamepadButtons value, bool allowNone, string noneLabel = "None", string prefix = "")
     {
         var changed = false;
-        ImGui.SetNextItemWidth(160 * ImGuiHelpers.GlobalScale);
-        using var combo = ImRaii.Combo(label, Plugin.ButtonName(value));
+        ImGui.SetNextItemWidth((allowNone ? 170 : 160) * ImGuiHelpers.GlobalScale);
+        var preview = value == GamepadButtons.None ? noneLabel : prefix + Plugin.ButtonName(value);
+        using var combo = ImRaii.Combo(label, preview);
         if (!combo)
             return false;
-        foreach (var b in Plugin.FaceButtons)
+        if (allowNone && ImGui.Selectable(noneLabel, value == GamepadButtons.None))
         {
-            if (ImGui.Selectable(Plugin.ButtonName(b), b == value))
+            value = GamepadButtons.None;
+            changed = true;
+        }
+        foreach (var b in Plugin.AllPadButtons)
+        {
+            if (ImGui.Selectable(prefix + Plugin.ButtonName(b), b == value))
             {
                 value = b;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /// <summary>Shift / Ctrl / Alt checkboxes on the same line (any combination).</summary>
+    private static bool ModsCheckboxes(string id, ref KeyMods mods)
+    {
+        var changed = false;
+        foreach (var (flag, name) in new[] { (KeyMods.Ctrl, "Ctrl"), (KeyMods.Shift, "Shift"), (KeyMods.Alt, "Alt") })
+        {
+            ImGui.SameLine();
+            var on = mods.HasFlag(flag);
+            if (ImGui.Checkbox($"{name}##{id}{name}", ref on))
+            {
+                mods = on ? mods | flag : mods & ~flag;
                 changed = true;
             }
         }

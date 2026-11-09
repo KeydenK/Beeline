@@ -35,10 +35,10 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - **Layered places** (cities with several floors): the right floor is picked from the marker's height.
   - Works with active quests, new quests (the quest-giver icons), levequests, guildleves, Triple Triad and special NPCs.
   - **Quest journal:** open the map from a quest in the journal and press the button right away: the quest's marker is found by its name.
-- **Controller, mouse or keyboard:**
-  - Controller: Square / X by default (or any face button).
-  - Mouse: middle click by default, or left / right click, or a side button, with an optional Shift / Ctrl / Alt.
-  - Keyboard: any key you choose, pressed while the mouse is over the map.
+- **Controller, mouse or keyboard, any button or combo:**
+  - Controller: **Cross / A** by default. Any button works, and you can add a second button to hold for a combo (for example L2 + Cross).
+  - Mouse: **Ctrl + left click** by default. Left, right or middle click or a side button, with any mix of Ctrl, Shift and Alt.
+  - Keyboard: any key you choose (with any mix of Ctrl, Shift and Alt), pressed while the mouse is over the map.
 - **You stay in control.** A trip stops as soon as you move your character, and in a few other cases (see [When does a trip stop?](#when-does-a-trip-stop)).
 - **Optional: dismount when you target an enemy** (off by default).
 - **Lightweight.** It does nothing while the map is closed and no trip is running. See [Performance](#performance).
@@ -63,13 +63,13 @@ Without Lifestream, Beeline still works inside your current zone (it just can't 
 3. Click **Save and Close**.
 4. Type `/xlplugins`, search for **Beeline** and click **Install**.
 
-It works right away with a controller (Square / X) and a mouse (middle click). No setup needed.
+It works right away with a controller (Cross / A) and a mouse (Ctrl + left click). No setup needed.
 
 ## Usage
 
 1. Open the map.
 2. Put the cursor on where you want to go: an aetheryte, a shard, a quest marker, an NPC icon, a quest area or any spot. Any zone works, not just the one you're in.
-3. Press **Square / X** on a controller, **middle click** with a mouse, or your keyboard key.
+3. Press **Cross / A** on a controller, **Ctrl + left click** with a mouse, or your keyboard key.
 
 That's it. You can close the map; the trip goes on. To stop it, just move your character.
 
@@ -80,9 +80,10 @@ Type `/beeline` to open the settings window. Its top shows whether Lifestream an
 | Setting | What it does | Default |
 | --- | --- | --- |
 | Go to what is under the map cursor | Turns Beeline on or off | On |
-| Controller button | Square / X, Triangle / Y, Cross / A or Circle / B | Square / X |
-| Mouse button | Left, right or middle click, back or forward side button, or off. Optionally with Shift, Ctrl or Alt held. Dragging the map doesn't count | Middle click |
-| Keyboard key | Any key, pressed while the mouse is over the map. Pick one the game doesn't use, or both will happen | None |
+| Controller button | Any button: face buttons, D-pad, L1 / R1, L2 / R2, L3 / R3, Create / View, Options / Menu | Cross / A |
+| Controller combo | An optional second button to hold at the same time (for example L2 + Cross) | No combo |
+| Mouse button | Left, right or middle click, back or forward side button, or off. Plus any mix of Ctrl, Shift and Alt. Dragging the map doesn't count | Ctrl + left click |
+| Keyboard key | Any key, plus any mix of Ctrl, Shift and Alt, pressed while the mouse is over the map. Pick one the game doesn't use, or both will happen | None |
 | Use aethernet shards to get closer | Routes may go through the aethernet shard closest to the spot | On |
 | Mount up when the point is far | Uses Mount Roulette after arriving, if the spot is further than this | On, 40 yalms |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
@@ -122,11 +123,11 @@ So that Beeline never goes somewhere you didn't ask for:
 
 ## FAQ
 
-**Why Square / X and not Cross / A?**
-Cross / A (or Circle / B, depending on your settings) is the game's own confirm button on the map, so the game may react to the same press (on an aetheryte, for example). Square / X avoids any clash, but you can still choose another button.
+**Which buttons should I avoid?**
+The map already uses some of them. With a controller, **Square / X and Circle / B close the map** and **Triangle / Y switches between the city and region maps**. With a mouse, **middle click is auto-run**, a plain **left click** on an aetheryte opens the game's teleport window, and **right click** opens the map's menu. The defaults (Cross / A, and Ctrl + left click) avoid all of that. If you'd like another button the map uses, add a combo (a held controller button, or Ctrl / Shift / Alt) and the settings window warns you when a choice would clash.
 
-**Can I use left click?**
-Yes, but the map uses it too: a left click on an aetheryte opens the game's teleport window, and Lifestream also teleports when you click a shard. **Ctrl + left click** avoids both (Lifestream ignores Ctrl clicks). Same idea for right click, which opens the map's menu. Dragging the map with the button held never counts as a click.
+**Why Ctrl + left click?**
+A plain left click is already used by the map (an aetheryte opens the game's teleport window) and by Lifestream (a click on a shard takes the aethernet). Lifestream deliberately ignores Ctrl clicks, so Ctrl + left click is free. Dragging the map with the button held never counts as a click.
 
 **Does it cost gil?**
 Teleports cost the usual gil, like teleporting yourself. The aethernet is free. If you'd rather teleport less, raise **Advanced → Teleport is worth**.

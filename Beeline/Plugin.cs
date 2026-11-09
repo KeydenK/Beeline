@@ -16,15 +16,20 @@ namespace Beeline;
 [Serializable]
 public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    /// <summary>2: new defaults (Square/X closed the map and middle click is auto-run in game).</summary>
+    public int Version { get; set; } = 2;
 
     public bool Enabled { get; set; } = true;
     /// <summary>The one button: aetheryte/shard under the cursor → go there; anywhere else → travel there.</summary>
-    public GamepadButtons Button { get; set; } = GamepadButtons.West;
+    public GamepadButtons Button { get; set; } = GamepadButtons.South;
+    /// <summary>Optional controller button to hold at the same time (a combo, e.g. L2 + Cross). None = no combo.</summary>
+    public GamepadButtons ButtonHold { get; set; } = GamepadButtons.None;
     /// <summary>Same thing with the mouse (cursor on the map) or a keyboard key (mouse over the map).</summary>
-    public MouseTrigger MouseButton { get; set; } = MouseTrigger.Middle;
-    /// <summary>Key to hold with the mouse button (useful for left/right click, which the map also uses).</summary>
-    public KeyModifier MouseModifier { get; set; } = KeyModifier.None;
+    public MouseTrigger MouseButton { get; set; } = MouseTrigger.Left;
+    /// <summary>Keys to hold with the mouse button (Ctrl + left click: Lifestream ignores Ctrl clicks on the map).</summary>
+    public KeyMods MouseMods { get; set; } = KeyMods.Ctrl;
+    /// <summary>Keys to hold with the keyboard key.</summary>
+    public KeyMods HotkeyMods { get; set; } = KeyMods.None;
     /// <summary>Target the quest NPC/object when you arrive within talking range (never enemies).</summary>
     public bool TargetOnArrival { get; set; } = true;
     public VirtualKey Hotkey { get; set; } = VirtualKey.NO_KEY;
@@ -47,7 +52,7 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
 }
 
 public enum MouseTrigger { Off = 0, Middle = 1, Back = 2, Forward = 3, Left = 4, Right = 5 }
-public enum KeyModifier { None = 0, Shift = 1, Ctrl = 2, Alt = 3 }
+[Flags] public enum KeyMods { None = 0, Shift = 1, Ctrl = 2, Alt = 4 }
 
 public sealed unsafe class Plugin : IDalamudPlugin
 {
@@ -94,6 +99,19 @@ public sealed unsafe class Plugin : IDalamudPlugin
     {
         Config  = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         _cfg    = Config;
+        if (Config.Version < 2)
+        {
+            // The old defaults clash with the game: Square/X closes the map, middle click is auto-run.
+            if (Config.Button == GamepadButtons.West)
+                Config.Button = GamepadButtons.South;
+            if (Config.MouseButton == MouseTrigger.Middle)
+            {
+                Config.MouseButton = MouseTrigger.Left;
+                Config.MouseMods   = KeyMods.Ctrl;
+            }
+            Config.Version = 2;
+            PluginInterface.SavePluginConfig(Config);
+        }
         Ipc     = new Ipc(PluginInterface);
         _places = System.Threading.Tasks.Task.Run(() => new Places(Data));
         Travel  = new Travel(this);
@@ -140,15 +158,37 @@ public sealed unsafe class Plugin : IDalamudPlugin
             _configWindow.Toggle();
     }
 
-    internal static readonly GamepadButtons[] FaceButtons =
-        [GamepadButtons.South, GamepadButtons.East, GamepadButtons.West, GamepadButtons.North];
+    internal static readonly GamepadButtons[] AllPadButtons =
+    [
+        GamepadButtons.South, GamepadButtons.East, GamepadButtons.West, GamepadButtons.North,
+        GamepadButtons.DpadUp, GamepadButtons.DpadDown, GamepadButtons.DpadLeft, GamepadButtons.DpadRight,
+        GamepadButtons.L1, GamepadButtons.L2, GamepadButtons.L3, GamepadButtons.R1, GamepadButtons.R2, GamepadButtons.R3,
+        GamepadButtons.Select, GamepadButtons.Start,
+    ];
 
+    /// <summary>PlayStation / Xbox names.</summary>
     internal static string ButtonName(GamepadButtons b) => b switch
     {
-        GamepadButtons.South => "Cross / A",  GamepadButtons.East  => "Circle / B",
-        GamepadButtons.West  => "Square / X", GamepadButtons.North => "Triangle / Y",
+        GamepadButtons.None      => "None",
+        GamepadButtons.South     => "Cross / A",   GamepadButtons.East  => "Circle / B",
+        GamepadButtons.West      => "Square / X",  GamepadButtons.North => "Triangle / Y",
+        GamepadButtons.DpadUp    => "D-pad up",    GamepadButtons.DpadDown  => "D-pad down",
+        GamepadButtons.DpadLeft  => "D-pad left",  GamepadButtons.DpadRight => "D-pad right",
+        GamepadButtons.L1        => "L1 / LB",     GamepadButtons.R1 => "R1 / RB",
+        GamepadButtons.L2        => "L2 / LT",     GamepadButtons.R2 => "R2 / RT",
+        GamepadButtons.L3        => "L3 / left stick press", GamepadButtons.R3 => "R3 / right stick press",
+        GamepadButtons.Select    => "Create / View",          GamepadButtons.Start => "Options / Menu",
         _ => b.ToString(),
     };
+
+    internal static string ModsName(KeyMods m)
+    {
+        var parts = new List<string>();
+        if (m.HasFlag(KeyMods.Ctrl))  parts.Add("Ctrl");
+        if (m.HasFlag(KeyMods.Shift)) parts.Add("Shift");
+        if (m.HasFlag(KeyMods.Alt))   parts.Add("Alt");
+        return string.Join(" + ", parts);
+    }
 
     // The press that opened or re-centred the map (e.g. "Map" from the quest journal) must not start a trip:
     // ignore presses shortly after the map became visible (or after a gap in its updates), and presses
@@ -199,7 +239,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
             if (Gamepad.Raw(Config.Button) == 0)
                 _awaitRelease = false;
         }
-        else if (Gamepad.Pressed(Config.Button) != 0)
+        else if (Gamepad.Pressed(Config.Button) != 0
+                 && (Config.ButtonHold == GamepadButtons.None || Config.ButtonHold == Config.Button || Gamepad.Raw(Config.ButtonHold) != 0))
         {
             padPressed = true;
             _awaitRelease = true;
@@ -393,24 +434,22 @@ public sealed unsafe class Plugin : IDalamudPlugin
         }
         else if (!down && _mouseWasDown)
         {
-            clicked = _mouseDownOnMap && System.Numerics.Vector2.Distance(pos, _mouseDownAt) < 6f && ModifierHeld();
+            clicked = _mouseDownOnMap && System.Numerics.Vector2.Distance(pos, _mouseDownAt) < 6f && ModsHeld(Config.MouseMods);
         }
         _mouseWasDown = down;
         return clicked;
     }
 
-    private bool ModifierHeld() => Config.MouseModifier switch
-    {
-        KeyModifier.Shift => IsDown(0x10),
-        KeyModifier.Ctrl  => IsDown(0x11),
-        KeyModifier.Alt   => IsDown(0x12),
-        _ => true,
-    };
+    /// <summary>Every chosen key (Shift / Ctrl / Alt) is held.</summary>
+    private static bool ModsHeld(KeyMods m)
+        => (!m.HasFlag(KeyMods.Shift) || IsDown(0x10))
+        && (!m.HasFlag(KeyMods.Ctrl)  || IsDown(0x11))
+        && (!m.HasFlag(KeyMods.Alt)   || IsDown(0x12));
 
     private bool HotkeyWentDown()
     {
         var key = Config.Hotkey;
-        var down = key != VirtualKey.NO_KEY && KeyState.IsVirtualKeyValid(key) && KeyState[key]
+        var down = key != VirtualKey.NO_KEY && KeyState.IsVirtualKeyValid(key) && KeyState[key] && ModsHeld(Config.HotkeyMods)
                    && !Dalamud.Bindings.ImGui.ImGui.GetIO().WantTextInput
                    && !RaptureAtkModule.Instance()->AtkModule.IsTextInputActive();
         var pressed = down && !_keyWasDown;
