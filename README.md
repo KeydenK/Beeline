@@ -26,6 +26,7 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - **Anywhere else, in any zone:** Beeline compares going there directly, taking the aethernet, and teleporting to the aetheryte (or shard) closest to the spot, and picks the quickest. Then it:
     - summons a mount on the way if the spot is far (Mount Roulette, while you keep moving),
     - flies if you have the zone's aether currents,
+    - uses **Peloton** (or **Sprint**) when you go on foot and it's ready,
     - and moves you the rest of the way with vnavmesh.
   - **No map flag is placed**, so your own flag is never touched.
 - **Made for questing.** Quest markers are used at their **exact** position, height included (the map cursor alone is only precise to about 5 yalms):
@@ -87,6 +88,7 @@ Type `/beeline` to open the settings window. Its top shows whether Lifestream an
 | Use aethernet shards to get closer | Routes may go through the aethernet shard closest to the spot | On |
 | Mount up when the point is far | Uses Mount Roulette on the way (you keep moving while it's summoned), if the spot is further than this | On, 40 yalms |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
+| Sprint or Peloton when going on foot | On foot (short trips, cities), uses Peloton if your job has it and it's ready (out of combat), otherwise Sprint | On |
 | Stop this far from quest mobs | Safe distance from quest enemies | 20 yalms |
 | Walk right up to mobs far below your level | No safe distance from enemies this many levels below you | On, 10 levels |
 | Target the quest NPC or object when you arrive | Only friendly NPCs and objects, only within talking range | On |

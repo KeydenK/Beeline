@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Plays nicer with auto-mount plugins: Beeline no longer summons a mount while you're already casting or getting on one, and treats riding pillion as mounted. From 1.2.0: no more standing still to mount, the mount is summoned on the way and you take off to fly when the zone allows it."
+  "Changelog": "New: on foot (short trips, cities), Beeline uses Peloton if your job has it and it's ready, otherwise Sprint (can be turned off). Mounting is also more reliable right after an instant action, and Beeline never summons a mount while something else is already mounting you (auto-mount plugins)."
 }

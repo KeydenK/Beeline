@@ -211,7 +211,14 @@ internal sealed class ConfigWindow : Window
             Config.AllowFlying = fly;
             _plugin.SaveConfig();
         }
-        Hint("Uses Mount Roulette. Flying needs all aether currents of the zone.");
+        var buffs = Config.SpeedBuffs;
+        if (ImGui.Checkbox("Sprint or Peloton when going on foot", ref buffs))
+        {
+            Config.SpeedBuffs = buffs;
+            _plugin.SaveConfig();
+        }
+        Hint("Uses Mount Roulette, summoned while you keep moving. Flying needs all aether currents of the zone. "
+           + "On foot (short trips, cities), Peloton is used if your job has it and it's ready, otherwise Sprint.");
 
         ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
         var mob = Config.MobDistance;

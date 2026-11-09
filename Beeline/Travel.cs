@@ -329,6 +329,8 @@ internal sealed unsafe class Travel : IDisposable
         _flying = fly;
         _wantMount = wantMount;
         _mountTries = 0;
+        _mountAttempts = 0;
+        _speedTries = 0;
         _sawFlying = fly;
         _sawMounted = Plugin.Condition[ConditionFlag.Mounted];
     }
@@ -338,6 +340,11 @@ internal sealed unsafe class Travel : IDisposable
     private bool _flying;         // vnavmesh was asked to fly
     private bool _wantMount;      // summon a mount on the way
     private bool _sawFlying, _sawMounted;
+    private int _mountAttempts;   // calls refused by the game (e.g. just after an instant action)
+    private int _speedTries;
+
+    private const uint PelotonAction = 7557, SprintGeneralAction = 4;
+    private const uint SprintStatus = 50, PelotonStatus = 1199;
 
     private void SendMove(bool fly)
     {
@@ -515,12 +522,33 @@ internal sealed unsafe class Travel : IDisposable
                     _sawMounted |= mounted;
                     _sawFlying |= c[ConditionFlag.InFlight];
 
-                    // Mount Roulette on the way: once, and once more after 1.5 s if it didn't take.
-                    if (_wantMount && !mounted && !mountingNow && !c[ConditionFlag.InCombat]
+                    // Mount Roulette on the way: once, and once more after 2.5 s if it didn't take. A call the game
+                    // refuses (e.g. right after an instant action) doesn't count; give up after ~3 s of refusals.
+                    if (_wantMount && !mounted && !mountingNow && !c[ConditionFlag.InCombat] && _mountAttempts < 30
                         && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500)))
                     {
-                        _mountTries++;
-                        ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9);
+                        if (ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9))
+                            _mountTries++;
+                        else
+                            _mountAttempts++;
+                    }
+
+                    // On foot for this trip: Peloton if your job has it and it's ready (out of combat only), else Sprint.
+                    if (Config.SpeedBuffs && !_wantMount && !mounted && !mountingNow && _speedTries < 10
+                        && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20
+                        && !player.StatusList.Any(st => st.StatusId is SprintStatus or PelotonStatus))
+                    {
+                        _speedTries++;
+                        var am = ActionManager.Instance();
+                        var used = !c[ConditionFlag.InCombat] && am->GetActionStatus(ActionType.Action, PelotonAction) == 0
+                                   && am->UseAction(ActionType.Action, PelotonAction);
+                        if (!used && am->GetActionStatus(ActionType.GeneralAction, SprintGeneralAction) == 0)
+                            used = am->UseAction(ActionType.GeneralAction, SprintGeneralAction);
+                        if (used)
+                        {
+                            _speedTries = 10;
+                            Plugin.Info($"{Plugin.Tag} Used a speed boost (Peloton or Sprint)");
+                        }
                     }
 
                     // Mounted in a zone where you can fly: take off and fly the rest of the way.

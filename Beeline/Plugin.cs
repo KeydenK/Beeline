@@ -37,6 +37,8 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public bool AutoMount { get; set; } = true;
     public int MountDistance { get; set; } = 40;
     public bool AllowFlying { get; set; } = true;
+    /// <summary>On foot (no mount on this trip): use Peloton if your job has it and it's ready, else Sprint if ready.</summary>
+    public bool SpeedBuffs { get; set; } = true;
     /// <summary>How far from a quest mob to stop (yalms), so it does not pull it.</summary>
     public int MobDistance { get; set; } = 20;
     /// <summary>No safe distance from mobs this many levels (or more) below you: they can't aggro you.</summary>
