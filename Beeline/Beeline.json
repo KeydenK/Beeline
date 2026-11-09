@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Fix: clicking a quest marker with the mouse could miss it and go to a spot next to it instead (the click hides the map's tooltip, and on a zoomed-out map the icon covers more ground than Beeline expected). The marker is now found reliably at any zoom. Also: on a plain spot with several levels (street, walkways, roofs), Beeline now prefers the level you're on."
+  "Changelog": "Smarter routes: instead of fixed values, Beeline now times your own teleports, aethernet hops and mounting, and measures how fast you really get somewhere on foot, riding and flying, then picks the route with the shortest time. It gets better as you use it; see Advanced → Route timing. Also: clicking a quest marker with the mouse no longer misses it, and plain spots with several levels now prefer the level you're on."
 }

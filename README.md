@@ -91,7 +91,7 @@ Type `/beeline` to open the settings window. Its top shows whether Lifestream an
 | Walk right up to mobs far below your level | No safe distance from enemies this many levels below you | On, 10 levels |
 | Target the quest NPC or object when you arrive | Only friendly NPCs and objects, only within talking range | On |
 | Dismount when you target an enemy | Gets you off your mount as soon as you target something you can attack | Off |
-| **Advanced:** Teleport is worth / Aethernet is worth | How far you could ride in the time a teleport or an aethernet hop takes. Higher = Beeline teleports less often | 150 / 60 yalms |
+| **Advanced:** Route timing | Shows what Beeline learned from your trips (how long your teleports, aethernet hops and mounting take, and how fast you go on foot, riding and flying), with a button to reset it | Learned automatically |
 | **Advanced:** Write each button press and trip step to the Dalamud log | For troubleshooting | Off |
 
 ### Commands
@@ -130,10 +130,10 @@ The map already uses some of them. With a controller, **Square / X and Circle / 
 A plain left click is already used by the map (an aetheryte opens the game's teleport window) and by Lifestream (a click on a shard takes the aethernet). Lifestream deliberately ignores Ctrl clicks, so Ctrl + left click is free. Dragging the map with the button held never counts as a click.
 
 **Does it cost gil?**
-Teleports cost the usual gil, like teleporting yourself. The aethernet is free. If you'd rather teleport less, raise **Advanced → Teleport is worth**.
+Teleports cost the usual gil, like teleporting yourself. The aethernet is free.
 
 **It teleported even though I could have walked.**
-Beeline counts a teleport as worth 150 yalms of riding (the cast plus the loading screen). If the aetheryte is much closer to the spot than you are, teleporting wins. You can change that in **Advanced**.
+Beeline estimates the time of each route and picks the shortest one. A teleport takes a while (the cast plus the loading screen), but if the aetheryte is much closer to the spot than you are, it still wins. The estimates come from your own trips: Beeline times your teleports and aethernet hops (a fast PC loads quicker) and measures how fast you actually get somewhere on foot, riding and flying, so its choices get better as you use it. You can see these numbers in **Advanced → Route timing**.
 
 **Why didn't it mount?**
 It only mounts when the spot is further than the "mount up" distance, where mounts are allowed (not in most cities), and not in combat.
@@ -190,7 +190,7 @@ Beeline is built to cost nothing when you're not using it:
 Aetheryte and shard positions come from the game's own map data, the same source Lifestream uses.
 Quest markers come from the game's marker list, which holds each marker's exact 3D position, its area radius, and the NPC, object or enemy it points at.
 
-The route is picked by comparing distances: going directly costs the distance to the spot, while a route through an aetheryte costs a fixed amount for the teleport (and the aethernet hop), plus the distance from that aetheryte to the spot.
+The route is picked by estimating how many seconds each one takes: the teleport and aethernet hops, mounting up when the spot is far, then riding, flying or running the rest of the way. These times are learned from your own trips (how long your teleports and aethernet hops take, and how fast you really progress toward a spot, detours included), starting from sensible defaults.
 Teleports go through Lifestream: first the teleport, then, once you've arrived, the aethernet hop if the route needs one.
 
 After arriving, Beeline asks vnavmesh for the walkable ground at the spot (at the marker's height when there is one) and sends you there, or right next to the quest NPC or object once it's loaded.

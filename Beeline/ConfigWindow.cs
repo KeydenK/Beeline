@@ -259,21 +259,27 @@ internal sealed class ConfigWindow : Window
         if (!ImGui.CollapsingHeader("Advanced"))
             return;
 
-        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
-        var tp = Config.TeleportCost;
-        if (ImGui.SliderInt("Teleport is worth", ref tp, 0, 500, "%d yalms"))
+        ImGui.TextUnformatted("Route timing, learned from your trips");
+        Hint("Beeline times your teleports, aethernet hops and mounting, and measures how fast you get somewhere on foot, riding and flying. "
+           + "It picks the route with the shortest time. Each trip refines these numbers.");
+        using (var table = ImRaii.Table("timings", 3, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.RowBg))
         {
-            Config.TeleportCost = tp;
+            if (table)
+            {
+                Row("Teleport",         $"{Config.TeleportSeconds:0.0} s", Config.TeleportSamples);
+                Row("Aethernet hop",    $"{Config.AethernetSeconds:0.0} s", Config.AethernetSamples);
+                Row("Mounting up",      $"{Config.MountSeconds:0.0} s", Config.MountSamples);
+                Row("On foot",          $"{Config.RunSpeed:0.0} yalms/s", Config.RunSamples);
+                Row("Riding",           $"{Config.RideSpeed:0.0} yalms/s", Config.RideSamples);
+                Row("Flying",           $"{Config.FlySpeed:0.0} yalms/s", Config.FlySamples);
+            }
+        }
+        if (ImGui.Button("Reset to defaults"))
+        {
+            Config.ResetTimings();
             _plugin.SaveConfig();
         }
-        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
-        var ae = Config.AethernetCost;
-        if (ImGui.SliderInt("Aethernet is worth", ref ae, 0, 300, "%d yalms"))
-        {
-            Config.AethernetCost = ae;
-            _plugin.SaveConfig();
-        }
-        Hint("How far you could ride in the time a teleport or an aethernet hop takes. Higher = teleports less often.");
+        ImGuiHelpers.ScaledDummy(4);
 
         var log = Config.LogPresses;
         if (ImGui.Checkbox("Write each button press and trip step to the Dalamud log", ref log))
@@ -281,6 +287,18 @@ internal sealed class ConfigWindow : Window
             Config.LogPresses = log;
             _plugin.SaveConfig();
         }
+    }
+
+    private static void Row(string what, string value, int samples)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(what);
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(value);
+        ImGui.TableNextColumn();
+        using (ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.DalamudGrey))
+            ImGui.TextUnformatted(samples == 0 ? "default" : samples == 1 ? "1 trip" : $"{samples} trips");
     }
 
     private static string KeyName(VirtualKey k) => k == VirtualKey.NO_KEY ? "None" : k.GetFancyName();

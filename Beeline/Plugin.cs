@@ -43,9 +43,27 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public bool IgnoreLowLevelMobs { get; set; } = true;
     public int NoAggroLevelGap { get; set; } = 10;
     public bool DismountOnEnemy { get; set; } = false;
-    /// <summary>How many yalms of riding a teleport is worth when comparing routes (~5 s cast + loading).</summary>
-    public int TeleportCost { get; set; } = 150;
-    public int AethernetCost { get; set; } = 60;
+    // Route timing, learned from your own trips (seconds, and yalms per second). The values below are only
+    // the starting point; each trip refines them. "Samples" = how many trips were measured.
+    public float TeleportSeconds { get; set; } = 12f;
+    public int TeleportSamples { get; set; }
+    public float AethernetSeconds { get; set; } = 7f;
+    public int AethernetSamples { get; set; }
+    public float MountSeconds { get; set; } = 2.5f;
+    public int MountSamples { get; set; }
+    public float RunSpeed { get; set; } = 6f;
+    public int RunSamples { get; set; }
+    public float RideSpeed { get; set; } = 9f;
+    public int RideSamples { get; set; }
+    public float FlySpeed { get; set; } = 11f;
+    public int FlySamples { get; set; }
+
+    public void ResetTimings()
+    {
+        TeleportSeconds = 12f; AethernetSeconds = 7f; MountSeconds = 2.5f;
+        RunSpeed = 6f; RideSpeed = 9f; FlySpeed = 11f;
+        TeleportSamples = AethernetSamples = MountSamples = RunSamples = RideSamples = FlySamples = 0;
+    }
 
     /// <summary>Write every press and trip step to the Dalamud log at Information level (else Debug).</summary>
     public bool LogPresses { get; set; } = false;

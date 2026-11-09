@@ -146,6 +146,8 @@ internal sealed unsafe class Travel : IDisposable
         }
 
         _navStarted = false;
+        _hop = r.FirstHop;
+        _hopTime.Restart();
         _tripTime.Restart();
         _tickTime.Restart();
         SetPhase(Phase.Arriving);
@@ -172,6 +174,8 @@ internal sealed unsafe class Travel : IDisposable
         _dataId         = 0;
         _radius         = 0;
         _navStarted     = false;
+        _hop            = Hop.Teleport;
+        _hopTime.Restart();
         _tripTime.Restart();
         _tickTime.Restart();
         SetPhase(Phase.Arriving);
@@ -206,8 +210,11 @@ internal sealed unsafe class Travel : IDisposable
     /// A way to get there. Teleport + aethernet routes first teleport to <see cref="FirstTerritory"/>, then, once
     /// arrived, take the aethernet to <see cref="ThenShard"/> (two steps with Lifestream's regular calls).
     /// </summary>
-    private readonly record struct Route(float Cost, string Describe, Vector2? Arrival, Func<bool> Go,
+    private readonly record struct Route(float Cost, string Describe, Vector2? Arrival, Func<bool> Go, Hop FirstHop,
                                          uint FirstTerritory = 0, uint ThenShard = 0, Vector2? ThenArrival = null);
+
+    private enum Hop { None, Teleport, Aethernet }
+    private enum MoveMode { Run, Ride, Fly }
 
     private Route? BestRoute(uint territory, Vector2 target, Vector2 here)
     {
@@ -217,8 +224,9 @@ internal sealed unsafe class Travel : IDisposable
         var routes = new List<Route>();
         var ui = UIState.Instance();
 
+        var mounted = Plugin.Condition[ConditionFlag.Mounted];
         if (Plugin.ClientState.TerritoryType == territory)
-            routes.Add(new Route(Vector2.Distance(here, target), "go directly", null, () => true));
+            routes.Add(new Route(LegSeconds(Vector2.Distance(here, target), territory, mounted), "go directly", null, () => true, Hop.None));
 
         if (!Plugin.IsPluginLoaded("Lifestream") || ui == null)
             return routes.Count == 0 ? null : routes[0];
@@ -231,29 +239,108 @@ internal sealed unsafe class Travel : IDisposable
         {
             if (place.Position is not { } pos || !ui->IsAetheryteUnlocked(place.Id))
                 continue;
-            var rest = Vector2.Distance(pos, target);
+            var rest = LegSeconds(Vector2.Distance(pos, target), territory, alreadyMounted: false);
             var name = place.Name;
 
             if (Config.UseShardsForTravel && active != null && !place.IsMain && place.Group != 0 && place.Group == active.Group && place.Id != active.Id)
             {
                 var id = place.Id;
-                routes.Add(new Route(Config.AethernetCost + rest, $"aethernet to {name}", pos, () => _p.Ipc.AethernetTo(id)));
+                routes.Add(new Route(Config.AethernetSeconds + rest, $"aethernet to {name}", pos, () => _p.Ipc.AethernetTo(id), Hop.Aethernet));
             }
 
             if (place.IsMain)
             {
                 var id = place.Id;
-                routes.Add(new Route(Config.TeleportCost + rest, $"teleport to {name}", pos, () => _p.Ipc.TeleportTo(id)));
+                routes.Add(new Route(Config.TeleportSeconds + rest, $"teleport to {name}", pos, () => _p.Ipc.TeleportTo(id), Hop.Teleport));
             }
             else if (Config.UseShardsForTravel && places.MasterOf(place) is { } master && ui->IsAetheryteUnlocked(master.Id))
             {
                 var m = master.Id;
-                routes.Add(new Route(Config.TeleportCost + Config.AethernetCost + rest, $"teleport to {master.Name} then aethernet to {name}",
-                    master.Position, () => _p.Ipc.TeleportTo(m), master.Territory, place.Id, pos));
+                routes.Add(new Route(Config.TeleportSeconds + Config.AethernetSeconds + rest, $"teleport to {master.Name} then aethernet to {name}",
+                    master.Position, () => _p.Ipc.TeleportTo(m), Hop.Teleport, master.Territory, place.Id, pos));
             }
         }
 
-        return routes.Count == 0 ? null : routes.MinBy(r => r.Cost);
+        if (routes.Count == 0)
+            return null;
+        if (Config.LogPresses)
+            foreach (var r in routes.OrderBy(r => r.Cost).Take(6))
+                Plugin.Info($"{Plugin.Tag}   option: {r.Describe}: ~{r.Cost:0.0} s");
+        return routes.MinBy(r => r.Cost);
+    }
+
+    /// <summary>
+    /// Seconds to cover a straight-line distance once there: on foot when it's short, otherwise mounting up
+    /// (if allowed and not already mounted) and riding or flying, at the speeds learned from your trips.
+    /// </summary>
+    private float LegSeconds(float distance, uint territory, bool alreadyMounted)
+    {
+        var canMount = Config.AutoMount && CanMount(territory);
+        if (!canMount || (distance <= Config.MountDistance && !alreadyMounted))
+            return distance / Math.Max(1f, Config.RunSpeed);
+        var speed = Config.AllowFlying && CanFly(territory) ? Config.FlySpeed : Config.RideSpeed;
+        return (alreadyMounted ? 0f : Config.MountSeconds) + distance / Math.Max(1f, speed);
+    }
+
+    // ---------------- Learning from your trips ----------------
+
+    private Hop _hop = Hop.None;                       // teleport / aethernet being timed
+    private readonly Stopwatch _hopTime = new();
+    private Vector2 _moveStart;                        // where vnavmesh started moving you
+    private MoveMode _moveMode;
+    private readonly Stopwatch _moveTime = new();
+
+    /// <summary>Running average that settles quickly at first, then keeps adapting a little.</summary>
+    private static float Blend(float old, int samples, float sample)
+        => old + (sample - old) * MathF.Max(0.25f, 1f / (samples + 1));
+
+    private void LearnHop()
+    {
+        var seconds = (float)_hopTime.Elapsed.TotalSeconds;
+        switch (_hop)
+        {
+            case Hop.Teleport when seconds is > 3 and < 45:
+                Config.TeleportSeconds = Blend(Config.TeleportSeconds, Config.TeleportSamples++, seconds);
+                Plugin.Info($"{Plugin.Tag} Teleport took {seconds:0.0} s (average now {Config.TeleportSeconds:0.0} s)");
+                _p.SaveConfig();
+                break;
+            case Hop.Aethernet when seconds is > 2 and < 30:
+                Config.AethernetSeconds = Blend(Config.AethernetSeconds, Config.AethernetSamples++, seconds);
+                Plugin.Info($"{Plugin.Tag} Aethernet took {seconds:0.0} s (average now {Config.AethernetSeconds:0.0} s)");
+                _p.SaveConfig();
+                break;
+        }
+        _hop = Hop.None;
+    }
+
+    private void StartMoving(Dalamud.Game.ClientState.Objects.Types.IGameObject player, bool fly)
+    {
+        _moveStart = Flat(player.Position);
+        _moveMode = fly ? MoveMode.Fly : Plugin.Condition[ConditionFlag.Mounted] ? MoveMode.Ride : MoveMode.Run;
+        _moveTime.Restart();
+    }
+
+    /// <summary>
+    /// Speed toward the target as the crow flies (so detours around walls and cliffs are included), measured on
+    /// trips long enough to mean something.
+    /// </summary>
+    private void LearnSpeed(Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    {
+        var seconds = (float)_moveTime.Elapsed.TotalSeconds;
+        var distance = Vector2.Distance(_moveStart, Flat(player.Position));
+        if (seconds < 3 || distance < 20)
+            return;
+        var speed = distance / seconds;
+        if (speed is < 2 or > 40)
+            return;
+        switch (_moveMode)
+        {
+            case MoveMode.Run:  Config.RunSpeed  = Blend(Config.RunSpeed,  Config.RunSamples++,  speed); break;
+            case MoveMode.Ride: Config.RideSpeed = Blend(Config.RideSpeed, Config.RideSamples++, speed); break;
+            case MoveMode.Fly:  Config.FlySpeed  = Blend(Config.FlySpeed,  Config.FlySamples++,  speed); break;
+        }
+        Plugin.Info($"{Plugin.Tag} {_moveMode}: {speed:0.0} y/s over {distance:0} y");
+        _p.SaveConfig();
     }
 
     private void OnUpdate(IFramework framework)
@@ -311,6 +398,7 @@ internal sealed unsafe class Travel : IDisposable
                     return;
                 if (_arrival is { } a && Vector2.Distance(Flat(player!.Position), a) > 60)
                     return; // the teleport has not happened yet
+                LearnHop();
 
                 // Teleported to the city's aetheryte: now take the aethernet to the shard.
                 if (_pendingShard != 0)
@@ -321,6 +409,8 @@ internal sealed unsafe class Travel : IDisposable
                     try { ok = _p.Ipc.AethernetTo(shard); } catch { ok = false; }
                     if (!ok) { Cancel("failed: could not take the aethernet"); return; }
                     Plugin.Info($"{Plugin.Tag} Arrived at the aetheryte: aethernet to #{shard}");
+                    _hop = Hop.Aethernet;
+                    _hopTime.Restart();
                     _arrival   = _shardArrival;
                     _territory = _finalTerritory;
                     SetPhase(Phase.Arriving);
@@ -341,8 +431,14 @@ internal sealed unsafe class Travel : IDisposable
             {
                 if (busy) return;
                 var far = Vector2.Distance(Flat(player!.Position), _target) > Config.MountDistance;
-                if (c[ConditionFlag.Mounted] || !far || !Config.AutoMount || !CanMount() || c[ConditionFlag.InCombat] || _phaseTime.Elapsed.TotalSeconds > 4)
+                if (c[ConditionFlag.Mounted] || !far || !Config.AutoMount || !CanMount(Plugin.ClientState.TerritoryType) || c[ConditionFlag.InCombat] || _phaseTime.Elapsed.TotalSeconds > 4)
                 {
+                    var took = (float)_phaseTime.Elapsed.TotalSeconds;
+                    if (c[ConditionFlag.Mounted] && _mountTries > 0 && took is > 0.3f and < 6)
+                    {
+                        Config.MountSeconds = Blend(Config.MountSeconds, Config.MountSamples++, took);
+                        _p.SaveConfig();
+                    }
                     SetPhase(Phase.WaitMesh);
                     return;
                 }
@@ -363,7 +459,7 @@ internal sealed unsafe class Travel : IDisposable
                 try { ready = _p.Ipc.NavReady(); } catch { Cancel("failed: vnavmesh is not available"); return; }
                 if (!ready) return;
 
-                var fly = Config.AllowFlying && c[ConditionFlag.Mounted] && CanFly();
+                var fly = Config.AllowFlying && c[ConditionFlag.Mounted] && CanFly(Plugin.ClientState.TerritoryType);
                 // The marker's NPC/object is already loaded: walk right up to it.
                 if (FindMarkerObject() is { } obj)
                 {
@@ -371,6 +467,7 @@ internal sealed unsafe class Travel : IDisposable
                     Plugin.Info($"{Plugin.Tag} Moving to {obj.Name} at {obj.Position} ({(fly ? "flying" : "on foot/mount")})");
                     try { _p.Ipc.NavMoveCloseTo(obj.Position, fly, StopDistance(obj)); }
                     catch { Cancel("failed: vnavmesh is not available"); return; }
+                    StartMoving(player!, fly);
                     SetPhase(Phase.Moving);
                     return;
                 }
@@ -397,6 +494,7 @@ internal sealed unsafe class Travel : IDisposable
                 Plugin.Info($"{Plugin.Tag} Moving to {dest.Value} ({(fly ? "flying" : "on foot/mount")})");
                 try { _p.Ipc.NavMoveTo(dest.Value, fly); }
                 catch { Cancel("failed: vnavmesh is not available"); return; }
+                StartMoving(player!, fly);
                 SetPhase(Phase.Moving);
                 return;
             }
@@ -442,6 +540,8 @@ internal sealed unsafe class Travel : IDisposable
                             Plugin.Info($"{Plugin.Tag} Not targeting {near.Name}: too far to interact ({Vector3.Distance(player!.Position, near.Position):0.0} y)");
                     }
 
+                    if (_navStarted)
+                        LearnSpeed(player!);
                     Stop();
                     var left = Vector2.Distance(Flat(player!.Position), _target);
                     Plugin.Info(_navStarted
@@ -560,12 +660,12 @@ internal sealed unsafe class Travel : IDisposable
 
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
 
-    private static bool CanMount()
-        => Plugin.Data.GetExcelSheet<TerritoryType>().TryGetRow(Plugin.ClientState.TerritoryType, out var t) && t.Mount;
+    private static bool CanMount(uint territory)
+        => Plugin.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t) && t.Mount;
 
-    private static bool CanFly()
+    private static bool CanFly(uint territory)
     {
-        if (!Plugin.Data.GetExcelSheet<TerritoryType>().TryGetRow(Plugin.ClientState.TerritoryType, out var t))
+        if (!Plugin.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t))
             return false;
         var set = t.AetherCurrentCompFlgSet.RowId;
         return set != 0 && PlayerState.Instance()->IsAetherCurrentZoneComplete(set);
