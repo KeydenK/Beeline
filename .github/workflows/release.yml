@@ -1,0 +1,79 @@
+# Push a tag like "v1.0.1" to build the plugin, publish a GitHub release,
+# and update repo.json so Dalamud offers the update to everyone.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check the tag
+        shell: pwsh
+        run: |
+          # Dalamud needs a plain numeric version (1.2.3 or 1.2.3.4).
+          if ("${{ github.ref_name }}" -notmatch '^v\d+\.\d+\.\d+(\.\d+)?$') {
+            Write-Error "Tag '${{ github.ref_name }}' must look like v1.2.3"
+            exit 1
+          }
+
+      # Build exactly the tagged commit.
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          dotnet build Beeline/Beeline.csproj -c Release -p:Version=$version
+          Copy-Item Beeline/bin/Release/Beeline/Beeline.json "$env:RUNNER_TEMP/Beeline.json"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Beeline/bin/Release/Beeline/latest.zip
+          generate_release_notes: true
+
+      - name: Update repo.json on main
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+
+          $manifest = Get-Content "$env:RUNNER_TEMP/Beeline.json" -Raw | ConvertFrom-Json
+          $repo = Get-Content repo.json -Raw | ConvertFrom-Json
+          $entry = @($repo)[0]
+          $entry.AssemblyVersion = $manifest.AssemblyVersion
+          $entry.DalamudApiLevel = $manifest.DalamudApiLevel
+          $entry.Changelog = $manifest.Changelog
+          $entry.LastUpdate = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          ConvertTo-Json -InputObject @($entry) -Depth 10 | Set-Content repo.json -Encoding utf8NoBOM
+
+          git add repo.json
+          git commit -m "Update repo.json for ${{ github.ref_name }}"
+
+          # If main moved in the meantime, rebase and try again.
+          for ($i = 1; $i -le 3; $i++) {
+            git push origin main
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            git pull --rebase origin main
+          }
+          Write-Error "Could not push repo.json to main"
+          exit 1

@@ -1,0 +1,50 @@
+[
+  {
+    "Author": "KeydenK",
+    "Name": "Beeline",
+    "InternalName": "Beeline",
+    "AssemblyVersion": "1.0.0.0",
+    "Punchline": "Point at anything on your map and press one button: Beeline takes you there the quickest way.",
+    "Description": "Point at anything on your map and press one button (controller, mouse or keyboard): Beeline takes you there the quickest way, picking between walking, the aethernet or a teleport, then mounting, flying and walking the rest for you. Made for questing: quest markers are used at their exact position, so you end up right next to the quest NPC or object, targeted and ready to talk to, and at a safe distance from quest enemies. Works on aetherytes, aethernet shards, quest and leve markers, quest areas and any spot, in any zone. Moving your character stops the trip at once. Requires Lifestream and vnavmesh. Command: /beeline",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/KeydenK/Beeline",
+    "Tags": [
+      "Controller",
+      "Gamepad",
+      "Mouse",
+      "Map",
+      "Teleport",
+      "Aetheryte",
+      "Aethernet",
+      "Travel",
+      "Navigation",
+      "Pathfinding",
+      "Quest",
+      "Questing",
+      "Leve",
+      "Mount",
+      "Flying",
+      "Lifestream",
+      "vnavmesh",
+      "QoL"
+    ],
+    "CategoryTags": [
+      "utility"
+    ],
+    "DalamudApiLevel": 15,
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "CanUnloadAsync": false,
+    "LoadPriority": 0,
+    "Changelog": "First release.",
+    "AcceptsFeedback": true,
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadCount": 0,
+    "LastUpdate": 0,
+    "DownloadLinkInstall": "https://github.com/KeydenK/Beeline/releases/latest/download/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/KeydenK/Beeline/releases/latest/download/latest.zip",
+    "DownloadLinkTesting": "https://github.com/KeydenK/Beeline/releases/latest/download/latest.zip",
+    "IconUrl": "https://raw.githubusercontent.com/KeydenK/Beeline/main/Beeline/images/icon.png"
+  }
+]
