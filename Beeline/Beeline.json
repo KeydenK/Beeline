@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "No more standing still to mount up: Beeline starts moving right away and summons your mount on the way, then takes off and flies the rest of the way when the zone allows it. Mounting no longer counts as extra time when comparing routes. From 1.1.x: routes are picked by the time they take, learned from your own teleports, aethernet hops and travel speeds (Advanced, Route timing)."
+  "Changelog": "Plays nicer with auto-mount plugins: Beeline no longer summons a mount while you're already casting or getting on one, and treats riding pillion as mounted. From 1.2.0: no more standing still to mount, the mount is summoned on the way and you take off to fly when the zone allows it."
 }

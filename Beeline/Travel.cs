@@ -463,7 +463,7 @@ internal sealed unsafe class Travel : IDisposable
                 var here = Plugin.ClientState.TerritoryType;
                 var fly = Config.AllowFlying && c[ConditionFlag.Mounted] && CanFly(here);
                 // Far away: summon a mount on the way (you keep moving while it's summoned).
-                var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.InCombat] && CanMount(here)
+                var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.RidingPillion] && !c[ConditionFlag.InCombat] && CanMount(here)
                                 && Vector2.Distance(Flat(player!.Position), _target) > Config.MountDistance;
                 // The marker's NPC/object is already loaded: walk right up to it.
                 if (FindMarkerObject() is { } obj)
@@ -508,13 +508,16 @@ internal sealed unsafe class Travel : IDisposable
             {
                 if (player != null)
                 {
-                    var mounted = c[ConditionFlag.Mounted];
+                    var mounted = c[ConditionFlag.Mounted] || c[ConditionFlag.RidingPillion];
+                    // Something else is already mounting you (another plugin's auto-mount, or you): leave it alone.
+                    var mountingNow = c[ConditionFlag.Casting] || c[ConditionFlag.Casting87] || c[ConditionFlag.Mounting]
+                                      || c[ConditionFlag.Mounting71] || c[ConditionFlag.MountOrOrnamentTransition];
                     _sawMounted |= mounted;
                     _sawFlying |= c[ConditionFlag.InFlight];
 
                     // Mount Roulette on the way: once, and once more after 1.5 s if it didn't take.
-                    if (_wantMount && !mounted && !c[ConditionFlag.InCombat]
-                        && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 1500)))
+                    if (_wantMount && !mounted && !mountingNow && !c[ConditionFlag.InCombat]
+                        && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500)))
                     {
                         _mountTries++;
                         ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9);

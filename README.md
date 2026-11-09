@@ -138,6 +138,9 @@ Beeline estimates the time of each route and picks the shortest one. A teleport 
 **Why didn't it mount?**
 It only mounts when the spot is further than the "mount up" distance, where mounts are allowed (not in most cities), and not in combat. The mount is summoned while you're already moving; once you're mounted in a zone where you can fly, Beeline takes off and flies the rest of the way.
 
+**I use another plugin that mounts me automatically. Will they fight?**
+No. Beeline only summons a mount if you aren't mounted yet, and it waits while you're already casting or getting on a mount, so another plugin's auto-mount (on entering a zone, after a fight...) simply wins and Beeline uses that mount. You can also turn off "Mount up when the point is far" and let your other plugin handle mounting.
+
 **Why didn't it fly?**
 Flying needs all the aether currents of the zone, and the "Fly when the zone allows it" option. Otherwise you ride on the ground.
 
