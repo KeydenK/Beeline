@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Lighter: the learned route timings are now saved once per trip instead of after every measurement. From 1.1.0: Beeline times your own teleports, aethernet hops and mounting and measures how fast you really travel on foot, riding and flying, then picks the route with the shortest time (see Advanced, Route timing)."
+  "Changelog": "No more standing still to mount up: Beeline starts moving right away and summons your mount on the way, then takes off and flies the rest of the way when the zone allows it. Mounting no longer counts as extra time when comparing routes. From 1.1.x: routes are picked by the time they take, learned from your own teleports, aethernet hops and travel speeds (Advanced, Route timing)."
 }

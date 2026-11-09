@@ -49,8 +49,6 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public int TeleportSamples { get; set; }
     public float AethernetSeconds { get; set; } = 7f;
     public int AethernetSamples { get; set; }
-    public float MountSeconds { get; set; } = 2.5f;
-    public int MountSamples { get; set; }
     public float RunSpeed { get; set; } = 6f;
     public int RunSamples { get; set; }
     public float RideSpeed { get; set; } = 9f;
@@ -60,9 +58,9 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
 
     public void ResetTimings()
     {
-        TeleportSeconds = 12f; AethernetSeconds = 7f; MountSeconds = 2.5f;
+        TeleportSeconds = 12f; AethernetSeconds = 7f;
         RunSpeed = 6f; RideSpeed = 9f; FlySpeed = 11f;
-        TeleportSamples = AethernetSamples = MountSamples = RunSamples = RideSamples = FlySamples = 0;
+        TeleportSamples = AethernetSamples = RunSamples = RideSamples = FlySamples = 0;
     }
 
     /// <summary>Write every press and trip step to the Dalamud log at Information level (else Debug).</summary>

@@ -19,7 +19,7 @@ namespace Beeline;
 /// </summary>
 internal sealed unsafe class Travel : IDisposable
 {
-    private enum Phase { None, Arriving, Mounting, WaitMesh, Moving }
+    private enum Phase { None, Arriving, WaitMesh, Moving }
 
     // Keys that move the character with the default keyboard layout.
     private static readonly VirtualKey[] MoveKeys =
@@ -55,7 +55,6 @@ internal sealed unsafe class Travel : IDisposable
     public string Status => _phase switch
     {
         Phase.Arriving => "Teleporting...",
-        Phase.Mounting => "Mounting...",
         Phase.WaitMesh => "Waiting for vnavmesh...",
         Phase.Moving   => "Moving there...",
         _ => "",
@@ -278,8 +277,8 @@ internal sealed unsafe class Travel : IDisposable
     }
 
     /// <summary>
-    /// Seconds to cover a straight-line distance once there: on foot when it's short, otherwise mounting up
-    /// (if allowed and not already mounted) and riding or flying, at the speeds learned from your trips.
+    /// Seconds to cover a straight-line distance once there: on foot when it's short, otherwise riding or flying
+    /// (the mount is summoned while you keep moving, so it costs no extra time), at the speeds learned from your trips.
     /// </summary>
     private float LegSeconds(float distance, uint territory, bool alreadyMounted)
     {
@@ -287,7 +286,7 @@ internal sealed unsafe class Travel : IDisposable
         if (!canMount || (distance <= Config.MountDistance && !alreadyMounted))
             return distance / Math.Max(1f, Config.RunSpeed);
         var speed = Config.AllowFlying && CanFly(territory) ? Config.FlySpeed : Config.RideSpeed;
-        return (alreadyMounted ? 0f : Config.MountSeconds) + distance / Math.Max(1f, speed);
+        return distance / Math.Max(1f, speed);
     }
 
     // ---------------- Learning from your trips ----------------
@@ -321,11 +320,29 @@ internal sealed unsafe class Travel : IDisposable
         _hop = Hop.None;
     }
 
-    private void StartMoving(Dalamud.Game.ClientState.Objects.Types.IGameObject player, bool fly)
+    private void StartMoving(Dalamud.Game.ClientState.Objects.Types.IGameObject player, Vector3 dest, float range, bool fly, bool wantMount)
     {
         _moveStart = Flat(player.Position);
-        _moveMode = fly ? MoveMode.Fly : Plugin.Condition[ConditionFlag.Mounted] ? MoveMode.Ride : MoveMode.Run;
         _moveTime.Restart();
+        _dest = dest;
+        _destRange = range;
+        _flying = fly;
+        _wantMount = wantMount;
+        _mountTries = 0;
+        _sawFlying = fly;
+        _sawMounted = Plugin.Condition[ConditionFlag.Mounted];
+    }
+
+    private Vector3 _dest;        // where vnavmesh is taking you
+    private float _destRange;     // stop this close (0 = exactly there)
+    private bool _flying;         // vnavmesh was asked to fly
+    private bool _wantMount;      // summon a mount on the way
+    private bool _sawFlying, _sawMounted;
+
+    private void SendMove(bool fly)
+    {
+        if (_destRange > 0) _p.Ipc.NavMoveCloseTo(_dest, fly, _destRange);
+        else _p.Ipc.NavMoveTo(_dest, fly);
     }
 
     /// <summary>
@@ -334,6 +351,7 @@ internal sealed unsafe class Travel : IDisposable
     /// </summary>
     private void LearnSpeed(Dalamud.Game.ClientState.Objects.Types.IGameObject player)
     {
+        _moveMode = _sawFlying ? MoveMode.Fly : (_sawMounted || Plugin.Condition[ConditionFlag.Mounted]) ? MoveMode.Ride : MoveMode.Run;
         var seconds = (float)_moveTime.Elapsed.TotalSeconds;
         var distance = Vector2.Distance(_moveStart, Flat(player.Position));
         if (seconds < 3 || distance < 20)
@@ -430,32 +448,7 @@ internal sealed unsafe class Travel : IDisposable
                     Stop();
                     return;
                 }
-                _mountTries = 0;
-                SetPhase(Phase.Mounting);
-                return;
-            }
-
-            case Phase.Mounting:
-            {
-                if (busy) return;
-                var far = Vector2.Distance(Flat(player!.Position), _target) > Config.MountDistance;
-                if (c[ConditionFlag.Mounted] || !far || !Config.AutoMount || !CanMount(Plugin.ClientState.TerritoryType) || c[ConditionFlag.InCombat] || _phaseTime.Elapsed.TotalSeconds > 4)
-                {
-                    var took = (float)_phaseTime.Elapsed.TotalSeconds;
-                    if (c[ConditionFlag.Mounted] && _mountTries > 0 && took is > 0.3f and < 6)
-                    {
-                        Config.MountSeconds = Blend(Config.MountSeconds, Config.MountSamples++, took);
-                        _timingsChanged = true; // saved once, when the trip ends
-                    }
-                    SetPhase(Phase.WaitMesh);
-                    return;
-                }
-                // Mount Roulette once, and once more after 1.5 s if it didn't take.
-                if (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 1500))
-                {
-                    _mountTries++;
-                    ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9);
-                }
+                SetPhase(Phase.WaitMesh);
                 return;
             }
 
@@ -467,15 +460,19 @@ internal sealed unsafe class Travel : IDisposable
                 try { ready = _p.Ipc.NavReady(); } catch { Cancel("failed: vnavmesh is not available"); return; }
                 if (!ready) return;
 
-                var fly = Config.AllowFlying && c[ConditionFlag.Mounted] && CanFly(Plugin.ClientState.TerritoryType);
+                var here = Plugin.ClientState.TerritoryType;
+                var fly = Config.AllowFlying && c[ConditionFlag.Mounted] && CanFly(here);
+                // Far away: summon a mount on the way (you keep moving while it's summoned).
+                var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.InCombat] && CanMount(here)
+                                && Vector2.Distance(Flat(player!.Position), _target) > Config.MountDistance;
                 // The marker's NPC/object is already loaded: walk right up to it.
                 if (FindMarkerObject() is { } obj)
                 {
                     _approached = true;
                     Plugin.Info($"{Plugin.Tag} Moving to {obj.Name} at {obj.Position} ({(fly ? "flying" : "on foot/mount")})");
-                    try { _p.Ipc.NavMoveCloseTo(obj.Position, fly, StopDistance(obj)); }
+                    StartMoving(player!, obj.Position, StopDistance(obj), fly, wantMount);
+                    try { SendMove(fly); }
                     catch { Cancel("failed: vnavmesh is not available"); return; }
-                    StartMoving(player!, fly);
                     SetPhase(Phase.Moving);
                     return;
                 }
@@ -500,15 +497,41 @@ internal sealed unsafe class Travel : IDisposable
                 if (dest == null) { Cancel("failed: no walkable ground at that spot"); return; }
 
                 Plugin.Info($"{Plugin.Tag} Moving to {dest.Value} ({(fly ? "flying" : "on foot/mount")})");
-                try { _p.Ipc.NavMoveTo(dest.Value, fly); }
+                StartMoving(player!, dest.Value, 0, fly, wantMount);
+                try { SendMove(fly); }
                 catch { Cancel("failed: vnavmesh is not available"); return; }
-                StartMoving(player!, fly);
                 SetPhase(Phase.Moving);
                 return;
             }
 
             case Phase.Moving:
             {
+                if (player != null)
+                {
+                    var mounted = c[ConditionFlag.Mounted];
+                    _sawMounted |= mounted;
+                    _sawFlying |= c[ConditionFlag.InFlight];
+
+                    // Mount Roulette on the way: once, and once more after 1.5 s if it didn't take.
+                    if (_wantMount && !mounted && !c[ConditionFlag.InCombat]
+                        && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 1500)))
+                    {
+                        _mountTries++;
+                        ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9);
+                    }
+
+                    // Mounted in a zone where you can fly: take off and fly the rest of the way.
+                    if (mounted && !_flying && Config.AllowFlying && CanFly(Plugin.ClientState.TerritoryType)
+                        && Vector2.Distance(Flat(player.Position), Flat(_dest)) > Config.MountDistance / 2f)
+                    {
+                        _flying = true;
+                        Plugin.Info($"{Plugin.Tag} Mounted: flying the rest of the way");
+                        try { SendMove(true); } catch { /* vnavmesh gone */ }
+                        _phaseTime.Restart(); // the new path takes a moment to start
+                        return;
+                    }
+                }
+
                 // Keep watching for your own movement until vnavmesh arrives (or gives up).
                 bool moving;
                 try { moving = _p.Ipc.NavMoving(); } catch { moving = false; }
@@ -529,7 +552,10 @@ internal sealed unsafe class Travel : IDisposable
                         {
                             _approached = true;
                             Plugin.Info($"{Plugin.Tag} {obj.Name} is loaded now: moving to {range:0} y from it");
-                            try { _p.Ipc.NavMoveCloseTo(obj.Position, c[ConditionFlag.InFlight], range); } catch { /* vnavmesh gone */ }
+                            _dest = obj.Position;
+                            _destRange = range;
+                            _flying = c[ConditionFlag.InFlight];
+                            try { SendMove(_flying); } catch { /* vnavmesh gone */ }
                             _navStarted = false;
                             SetPhase(Phase.Moving);
                             return;

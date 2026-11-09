@@ -24,7 +24,7 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
 - **One button, everything on the map:**
   - **On an aetheryte or an aethernet shard:** you go there. If you're on that city's aethernet, the aethernet is used (it's free); otherwise you teleport, and take the aethernet from there if the shard needs it.
   - **Anywhere else, in any zone:** Beeline compares going there directly, taking the aethernet, and teleporting to the aetheryte (or shard) closest to the spot, and picks the quickest. Then it:
-    - mounts up if the spot is far (Mount Roulette),
+    - summons a mount on the way if the spot is far (Mount Roulette, while you keep moving),
     - flies if you have the zone's aether currents,
     - and moves you the rest of the way with vnavmesh.
   - **No map flag is placed**, so your own flag is never touched.
@@ -73,7 +73,7 @@ It works right away with a controller (Cross / A) and a mouse (Ctrl + left click
 
 That's it. You can close the map; the trip goes on. To stop it, just move your character.
 
-Type `/beeline` to open the settings window. Its top shows whether Lifestream and vnavmesh are found and, during a trip, what Beeline is doing (teleporting, mounting, moving...) with a **Stop** button.
+Type `/beeline` to open the settings window. Its top shows whether Lifestream and vnavmesh are found and, during a trip, what Beeline is doing (teleporting, moving...) with a **Stop** button.
 
 ### Settings
 
@@ -85,13 +85,13 @@ Type `/beeline` to open the settings window. Its top shows whether Lifestream an
 | Mouse button | Left, right or middle click, back or forward side button, or off. Plus any mix of Ctrl, Shift and Alt. Dragging the map doesn't count | Ctrl + left click |
 | Keyboard key | Any key, plus any mix of Ctrl, Shift and Alt, pressed while the mouse is over the map. Pick one the game doesn't use, or both will happen | None |
 | Use aethernet shards to get closer | Routes may go through the aethernet shard closest to the spot | On |
-| Mount up when the point is far | Uses Mount Roulette after arriving, if the spot is further than this | On, 40 yalms |
+| Mount up when the point is far | Uses Mount Roulette on the way (you keep moving while it's summoned), if the spot is further than this | On, 40 yalms |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
 | Stop this far from quest mobs | Safe distance from quest enemies | 20 yalms |
 | Walk right up to mobs far below your level | No safe distance from enemies this many levels below you | On, 10 levels |
 | Target the quest NPC or object when you arrive | Only friendly NPCs and objects, only within talking range | On |
 | Dismount when you target an enemy | Gets you off your mount as soon as you target something you can attack | Off |
-| **Advanced:** Route timing | Shows what Beeline learned from your trips (how long your teleports, aethernet hops and mounting take, and how fast you go on foot, riding and flying), with a button to reset it | Learned automatically |
+| **Advanced:** Route timing | Shows what Beeline learned from your trips (how long your teleports and aethernet hops take, loading screens included, and how fast you go on foot, riding and flying), with a button to reset it | Learned automatically |
 | **Advanced:** Write each button press and trip step to the Dalamud log | For troubleshooting | Off |
 
 ### Commands
@@ -136,7 +136,7 @@ Teleports cost the usual gil, like teleporting yourself. The aethernet is free.
 Beeline estimates the time of each route and picks the shortest one. A teleport takes a while (the cast plus the loading screen), but if the aetheryte is much closer to the spot than you are, it still wins. The estimates come from your own trips: Beeline times your teleports and aethernet hops (a fast PC loads quicker) and measures how fast you actually get somewhere on foot, riding and flying, so its choices get better as you use it. You can see these numbers in **Advanced → Route timing**.
 
 **Why didn't it mount?**
-It only mounts when the spot is further than the "mount up" distance, where mounts are allowed (not in most cities), and not in combat.
+It only mounts when the spot is further than the "mount up" distance, where mounts are allowed (not in most cities), and not in combat. The mount is summoned while you're already moving; once you're mounted in a zone where you can fly, Beeline takes off and flies the rest of the way.
 
 **Why didn't it fly?**
 Flying needs all the aether currents of the zone, and the "Fly when the zone allows it" option. Otherwise you ride on the ground.
@@ -190,7 +190,7 @@ Beeline is built to cost nothing when you're not using it:
 Aetheryte and shard positions come from the game's own map data, the same source Lifestream uses.
 Quest markers come from the game's marker list, which holds each marker's exact 3D position, its area radius, and the NPC, object or enemy it points at.
 
-The route is picked by estimating how many seconds each one takes: the teleport and aethernet hops, mounting up when the spot is far, then riding, flying or running the rest of the way. These times are learned from your own trips (how long your teleports and aethernet hops take, and how fast you really progress toward a spot, detours included), starting from sensible defaults.
+The route is picked by estimating how many seconds each one takes: the teleport and aethernet hops, then riding or flying (the mount is summoned on the way) or running the rest of the way. These times are learned from your own trips (how long your teleports and aethernet hops take, and how fast you really progress toward a spot, detours included), starting from sensible defaults.
 Teleports go through Lifestream: first the teleport, then, once you've arrived, the aethernet hop if the route needs one.
 
 After arriving, Beeline asks vnavmesh for the walkable ground at the spot (at the marker's height when there is one) and sends you there, or right next to the quest NPC or object once it's loaded.

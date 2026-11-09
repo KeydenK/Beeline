@@ -260,7 +260,7 @@ internal sealed class ConfigWindow : Window
             return;
 
         ImGui.TextUnformatted("Route timing, learned from your trips");
-        Hint("Beeline times your teleports, aethernet hops and mounting, and measures how fast you get somewhere on foot, riding and flying. "
+        Hint("Beeline times your teleports and aethernet hops (loading screens), and measures how fast you get somewhere on foot, riding and flying. "
            + "It picks the route with the shortest time. Each trip refines these numbers.");
         using (var table = ImRaii.Table("timings", 3, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.RowBg))
         {
@@ -268,7 +268,6 @@ internal sealed class ConfigWindow : Window
             {
                 Row("Teleport",         $"{Config.TeleportSeconds:0.0} s", Config.TeleportSamples);
                 Row("Aethernet hop",    $"{Config.AethernetSeconds:0.0} s", Config.AethernetSamples);
-                Row("Mounting up",      $"{Config.MountSeconds:0.0} s", Config.MountSamples);
                 Row("On foot",          $"{Config.RunSpeed:0.0} yalms/s", Config.RunSamples);
                 Row("Riding",           $"{Config.RideSpeed:0.0} yalms/s", Config.RideSamples);
                 Row("Flying",           $"{Config.FlySpeed:0.0} yalms/s", Config.FlySamples);
