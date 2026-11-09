@@ -64,7 +64,7 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     /// <summary>Sprint, and Jog (which follows Sprint and lasts until you change zone or enter combat).</summary>
     public float SprintSpeed { get; set; } = 7.8f;
     public int SprintSamples { get; set; }
-    public float SprintSeconds { get; set; } = 10f;
+    public float SprintSeconds { get; set; } = 20f; // out of combat
     public float JogSpeed { get; set; } = 7.2f;
     public int JogSamples { get; set; }
     /// <summary>How much longer vnavmesh's path on the ground is than the straight line (walls, stairs, cliffs).</summary>
@@ -81,7 +81,7 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public void ResetTimings()
     {
         TeleportSeconds = 12f; AethernetSeconds = 7f;
-        RunSpeed = 6f; PelotonSpeed = 7.2f; SprintSpeed = 7.8f; SprintSeconds = 10f; JogSpeed = 7.2f;
+        RunSpeed = 6f; PelotonSpeed = 7.2f; SprintSpeed = 7.8f; SprintSeconds = 20f; JogSpeed = 7.2f;
         RideSpeed = 9f; FlySpeed = 11f; Detour = 1.15f; MountSeconds = 2f;
         TeleportSamples = AethernetSamples = RunSamples = PelotonSamples = SprintSamples = JogSamples = RideSamples = FlySamples = DetourSamples = MountSamples = 0;
     }
@@ -153,6 +153,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
             Config.Version = 2;
             PluginInterface.SavePluginConfig(Config);
         }
+        // Sprint lasts 20 s out of combat; older builds started from 10 s.
+        if (Config.SprintSamples == 0 && Config.SprintSeconds < 15)
+            Config.SprintSeconds = 20f;
         if (Config.Version < 3)
         {
             // The master switch is gone: if it was off, turn every input off instead, so nothing changes.

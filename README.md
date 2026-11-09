@@ -26,7 +26,7 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - **Anywhere else, in any zone:** Beeline compares going there directly, taking the aethernet, and teleporting to the aetheryte (or shard) closest to the spot, and picks the quickest. Then it:
     - summons a mount on the way when that's faster than staying on foot (your favourite mount or a roulette, while you keep moving),
     - flies if you have the zone's aether currents,
-    - on foot, uses **Sprint** when it's ready (you then keep **Jog** until you change zone or fight), otherwise keeps **Peloton** up if your job has it,
+    - on foot, uses **Sprint** when it's ready (you then keep **Jog** until you change map, mount up or fight), otherwise keeps **Peloton** up if your job has it,
     - and moves you the rest of the way with vnavmesh.
   - **No map flag is placed**, so your own flag is never touched.
 - **Made for questing.** Quest markers are used at their **exact** position, height included (the map cursor alone is only precise to about 5 yalms):
@@ -98,7 +98,7 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 | Summon a mount when it's faster | Summoned while you keep moving, whenever riding or flying gets you there sooner than staying on foot (worked out from your learned speeds). Off if you'd rather mount yourself | On |
 | Mount | Mount Roulette, or any mount you've unlocked (searchable list) | Mount Roulette |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
-| Sprint or Peloton on foot | Sprint when it's ready (Jog follows and lasts until you change zone or fight), otherwise Peloton if your job has it | On |
+| Sprint or Peloton on foot | Sprint when it's ready (Jog follows and lasts until you change map, mount up or fight), otherwise Peloton if your job has it | On |
 
 **Questing**
 

@@ -216,7 +216,7 @@ internal sealed unsafe class ConfigWindow : Window
         Check("Fly when the zone allows it", () => Config.AllowFlying, v => Config.AllowFlying = v,
               "Needs all the aether currents of the zone.");
         Check("Sprint or Peloton on foot", () => Config.SpeedBuffs, v => Config.SpeedBuffs = v,
-              "Sprint when it's ready (you then keep Jog until you change zone or fight), otherwise Peloton if your job has it.");
+              "Sprint when it's ready (you then keep Jog until you change map, mount up or fight), otherwise Peloton if your job has it.");
         Hint("Other plugins' auto-mount, auto-dismount or cancel-mount-cast features can knock you off your mount when Beeline takes off. "
            + "Turn them off: Beeline mounts you itself.");
     }

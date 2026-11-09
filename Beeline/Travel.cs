@@ -244,12 +244,15 @@ internal sealed unsafe class Travel : IDisposable
         try { activeId = _p.Ipc.ActiveAetheryte(); } catch { /* ignore */ }
         var active = activeId != 0 ? places.ById(activeId) : null;
 
-        _legAfterHop = true; // every option below starts with a teleport or an aethernet hop
+        // Jog survives a teleport / aethernet hop that stays on the same map, not a change of map.
+        var current = Plugin.ClientState.TerritoryType;
         foreach (var place in places.InTerritory(territory))
         {
             if (place.Position is not { } pos || !ui->IsAetheryteUnlocked(place.Id))
                 continue;
-            var rest = LegSeconds(Vector2.Distance(pos, target), territory, alreadyMounted: false);
+            var restDistance = Vector2.Distance(pos, target);
+            _legAfterHop = territory != current;
+            var rest = LegSeconds(restDistance, territory, alreadyMounted: false);
             var name = place.Name;
 
             if (Config.UseShardsForTravel && active != null && !place.IsMain && place.Group != 0 && place.Group == active.Group && place.Id != active.Id)
@@ -266,6 +269,8 @@ internal sealed unsafe class Travel : IDisposable
             else if (Config.UseShardsForTravel && places.MasterOf(place) is { } master && ui->IsAetheryteUnlocked(master.Id))
             {
                 var m = master.Id;
+                _legAfterHop = territory != current || master.Territory != current;
+                rest = LegSeconds(restDistance, territory, alreadyMounted: false);
                 routes.Add(new Route(Config.TeleportSeconds + Config.AethernetSeconds + rest, $"teleport to {master.Name} then aethernet to {name}",
                     master.Position, () => _p.Ipc.TeleportTo(m), Hop.Teleport, master.Territory, place.Id, pos));
             }
@@ -318,7 +323,7 @@ internal sealed unsafe class Travel : IDisposable
         => Config.AutoMount && CanMount(territory)
            && MountedSeconds(distance, territory, summon: true) < FootSeconds(distance * Math.Max(1f, Config.Detour), sameZone: true) - 0.3f;
 
-    private bool _legAfterHop; // set while estimating legs that start after a teleport / aethernet (a zone change ends Jog)
+    private bool _legAfterHop; // set while estimating legs that start after a change of map (that ends Jog; same-map hops keep it)
 
     /// <summary>
     /// Seconds on foot for a path length: at Jog speed if you're jogging and staying in the zone; otherwise Sprint
@@ -910,7 +915,7 @@ internal sealed unsafe class Travel : IDisposable
                     _sawPeloton |= hasPeloton;
                     SampleSpeed(player, mounted, c[ConditionFlag.InFlight], hasSprint, hasJog, hasPeloton);
 
-                    // On foot: Sprint first (Jog follows it and lasts until you change zone or fight), otherwise keep
+                    // On foot: Sprint first (Jog follows it and lasts until you change map, mount up or fight), otherwise keep
                     // Peloton up if your job has it. Nothing while Sprint or Jog is already running.
                     if (Config.SpeedBuffs && !mounted && !_wantMount && !mountingNow && !hasSprint && !hasJog && _boostFails < 20
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20)
