@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "New defaults that don't clash with the map: Cross / A on a controller (Square and Circle close the map, Triangle changes it) and Ctrl + left click with a mouse (middle click is auto-run). If you still had the old defaults, they are switched for you. Every controller button can now be picked, with an optional second button to hold for a combo, and Ctrl, Shift and Alt can be combined for the mouse and the keyboard key. The settings window warns you when a choice clashes with the map."
+  "Changelog": "Fix: on a plain spot in a place with several levels (a street with walkways or roofs above), Beeline could take you up to the highest level. It now prefers the level you're on. Also from 1.0.1: defaults that don't clash with the map (Cross / A, Ctrl + left click), any controller button with optional combos, and any mix of Ctrl, Shift and Alt for the mouse and the keyboard key."
 }

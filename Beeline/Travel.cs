@@ -383,7 +383,13 @@ internal sealed unsafe class Travel : IDisposable
                     dest = _targetY is { } y
                         ? _p.Ipc.NavGroundAt(_target.X, _target.Y, 5, y + 3) ?? _p.Ipc.NavGroundAt(_target.X, _target.Y, 25, y + 3)
                         : null;
-                    dest ??= _p.Ipc.NavGroundAt(_target.X, _target.Y, 5) ?? _p.Ipc.NavGroundAt(_target.X, _target.Y, 25);
+                    // A plain spot can have several floors (street, walkways, roofs): prefer the floor at
+                    // your own height, and only use the highest one if there is nothing at your level.
+                    var myLevel = player!.Position.Y + 5;
+                    dest ??= _p.Ipc.NavGroundAt(_target.X, _target.Y, 5, myLevel)
+                          ?? _p.Ipc.NavGroundAt(_target.X, _target.Y, 5)
+                          ?? _p.Ipc.NavGroundAt(_target.X, _target.Y, 25, myLevel)
+                          ?? _p.Ipc.NavGroundAt(_target.X, _target.Y, 25);
                 }
                 catch { Cancel("failed: vnavmesh is not available"); return; }
                 if (dest == null) { Cancel("failed: no walkable ground at that spot"); return; }

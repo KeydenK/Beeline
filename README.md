@@ -32,7 +32,7 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - **Quest NPCs and objects:** you walk right up to them, and they get **targeted once you're close enough to talk to them or use them**: just press confirm. (Can be turned off.)
   - **Quest areas** (the circles on the map): you're taken into the area. Areas that make the enemies appear when you step in work too.
   - **Quest enemies:** you stop at a **safe distance** (20 yalms by default) so you don't pull them by accident, unless they're far below your level and can't aggro you anyway. Enemies are never targeted.
-  - **Layered places** (cities with several floors): the right floor is picked from the marker's height.
+  - **Layered places** (cities with several floors): the right floor is picked from the marker's height. For plain spots, the floor at your own height is preferred.
   - Works with active quests, new quests (the quest-giver icons), levequests, guildleves, Triple Triad and special NPCs.
   - **Quest journal:** open the map from a quest in the journal and press the button right away: the quest's marker is found by its name.
 - **Controller, mouse or keyboard, any button or combo:**
@@ -168,7 +168,7 @@ Like every third-party tool, Dalamud plugins are against the game's terms of ser
 ## Limitations
 
 - **Spots without a marker** are only as precise as the map cursor (about 5 yalms). Quest markers are exact.
-- **Plain spots in layered places** go to the highest floor at that spot (quest markers pick the right floor).
+- **Plain spots in layered places** (streets with walkways or roofs above) go to the floor at your own height when there is one there, otherwise to the highest one. Quest markers always pick the right floor.
 - **Residential district shards** (housing wards) and **airship landings** aren't used for routes.
 - **Gathering points** aren't walked to or targeted: gathering leves take you to the area.
 - **Quest areas whose enemies are already there** before you arrive count as roaming enemies: you stop at the safe distance.
