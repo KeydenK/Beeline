@@ -24,9 +24,9 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
 - **One button, everything on the map:**
   - **On an aetheryte or an aethernet shard:** you go there. If you're on that city's aethernet, the aethernet is used (it's free); otherwise you teleport, and take the aethernet from there if the shard needs it.
   - **Anywhere else, in any zone:** Beeline compares going there directly, taking the aethernet, and teleporting to the aetheryte (or shard) closest to the spot, and picks the quickest. Then it:
-    - summons a mount on the way if the spot is far (Mount Roulette, while you keep moving),
+    - summons a mount on the way when that's faster than staying on foot (your favourite mount or a roulette, while you keep moving),
     - flies if you have the zone's aether currents,
-    - uses **Peloton** (or **Sprint**) when you go on foot and it's ready,
+    - on foot, uses **Sprint** when it's ready (you then keep **Jog** until you change zone or fight), otherwise keeps **Peloton** up if your job has it,
     - and moves you the rest of the way with vnavmesh.
   - **No map flag is placed**, so your own flag is never touched.
 - **Made for questing.** Quest markers are used at their **exact** position, height included (the map cursor alone is only precise to about 5 yalms):
@@ -74,27 +74,47 @@ It works right away with a controller (Cross / A) and a mouse (Ctrl + left click
 
 That's it. You can close the map; the trip goes on. To stop it, just move your character.
 
-Type `/beeline` to open the settings window. Its top shows whether Lifestream and vnavmesh are found and, during a trip, what Beeline is doing (teleporting, moving...) with a **Stop** button.
+Type `/beeline` to open the settings window.
 
 ### Settings
 
+The window has a short status line at the top (Lifestream and vnavmesh found, and the current trip with a **Stop** button), then four tabs. Hover the **(?)** markers for details.
+
+**Controls**
+
 | Setting | What it does | Default |
 | --- | --- | --- |
-| Go to what is under the map cursor | Turns Beeline on or off | On |
-| Controller button | Any button: face buttons, D-pad, L1 / R1, L2 / R2, L3 / R3, Create / View, Options / Menu | Cross / A |
-| Controller combo | An optional second button to hold at the same time (for example L2 + Cross) | No combo |
-| Mouse button | Left, right or middle click, back or forward side button, or off. Plus any mix of Ctrl, Shift and Alt. Dragging the map doesn't count | Ctrl + left click |
-| Keyboard key | Any key, plus any mix of Ctrl, Shift and Alt, pressed while the mouse is over the map. Pick one the game doesn't use, or both will happen | None |
+| Controller | Any button, or Off. Optionally a second button to hold for a combo (for example L2 + Cross) | Cross / A |
+| Mouse | Left, right or middle click, back or forward side button, or Off, plus any mix of Ctrl, Shift and Alt. Dragging the map doesn't count | Ctrl + left click |
+| Keyboard | Any key, or Off, plus any mix of Ctrl, Shift and Alt, pressed while the mouse is over the map. Pick one the game doesn't use, or both will happen | Off |
+
+The tab warns you when a choice clashes with the map (Square / Circle close it, Triangle changes it, middle click is auto-run).
+
+**Travel**
+
+| Setting | What it does | Default |
+| --- | --- | --- |
 | Use aethernet shards to get closer | Routes may go through the aethernet shard closest to the spot | On |
-| Mount up when the point is far | Uses Mount Roulette on the way (you keep moving while it's summoned), if the spot is further than this | On, 40 yalms |
+| Summon a mount when it's faster | Summoned while you keep moving, whenever riding or flying gets you there sooner than staying on foot (worked out from your learned speeds). Off if you'd rather mount yourself | On |
+| Mount | Mount Roulette, or any mount you've unlocked (searchable list) | Mount Roulette |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
-| Sprint or Peloton when going on foot | On foot (short trips, cities), uses Peloton if your job has it and it's ready (out of combat), otherwise Sprint | On |
-| Stop this far from quest mobs | Safe distance from quest enemies | 20 yalms |
-| Walk right up to mobs far below your level | No safe distance from enemies this many levels below you | On, 10 levels |
-| Target the quest NPC or object when you arrive | Only friendly NPCs and objects, only within talking range | On |
+| Sprint or Peloton on foot | Sprint when it's ready (Jog follows and lasts until you change zone or fight), otherwise Peloton if your job has it | On |
+
+**Questing**
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| Target the quest NPC or object when you arrive | Only friendly NPCs and objects, only within talking range. Enemies are never targeted | On |
+| Safe distance from quest enemies | Stop this far from enemies you have to fight | 20 yalms |
+| No safe distance from enemies far below your level | Walk right up to enemies this many levels below you (they can't aggro you) | On, 10 levels |
 | Dismount when you target an enemy | Gets you off your mount as soon as you target something you can attack | Off |
-| **Advanced:** Route timing | Shows what Beeline learned from your trips (how long your teleports and aethernet hops take, loading screens included, and how fast you go on foot, riding and flying), with a button to reset it | Learned automatically |
-| **Advanced:** Write each button press and trip step to the Dalamud log | For troubleshooting | Off |
+
+**Advanced**
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| Route timing | What Beeline learned from your trips: how long your teleports and aethernet hops take (loading screens included), how long getting on a mount takes, how fast you go running, with Peloton, Sprint and Jog, riding and flying, how long Sprint lasts, and how much longer real paths are than a straight line. With a button to reset it | Learned automatically |
+| Write each button press and trip step to the Dalamud log | For troubleshooting | Off |
 
 ### Commands
 
@@ -138,10 +158,10 @@ Teleports cost the usual gil, like teleporting yourself. The aethernet is free.
 Beeline estimates the time of each route and picks the shortest one. A teleport takes a while (the cast plus the loading screen), but if the aetheryte is much closer to the spot than you are, it still wins. The estimates come from your own trips: Beeline times your teleports and aethernet hops (a fast PC loads quicker) and measures how fast you actually get somewhere on foot, riding and flying, so its choices get better as you use it. You can see these numbers in **Advanced → Route timing**.
 
 **Why didn't it mount?**
-It only mounts when the spot is further than the "mount up" distance, where mounts are allowed (not in most cities), and not in combat. The mount is summoned while you're already moving; once you're mounted in a zone where you can fly, Beeline takes off and flies the rest of the way.
+It only mounts when riding or flying gets you there sooner than staying on foot (for a short distance, or when you're already jogging fast, walking wins), where mounts are allowed (not in most cities), and not in combat. The mount is summoned while you're already moving; once you're mounted in a zone where you can fly, Beeline takes off and flies the rest of the way.
 
 **I use another plugin that mounts me automatically. Will they fight?**
-No. After a teleport or an aethernet hop, Beeline waits a moment before summoning its own mount, so auto-mount plugins (Daily Routines' Auto Mount when switching zones, for example) get there first. It never summons a mount while you're already casting or getting on one, and never once you've been mounted on that trip, so it doesn't trigger "auto dismount" features either. Whoever mounts you, Beeline just uses that mount. You can also turn off "Mount up when the point is far" and let your other plugin handle mounting.
+They can. Beeline mounts you itself and takes off right away; it doesn't slow down to suit other plugins. Other plugins' auto-mount, auto-dismount or cancel-mount-cast features can react to the take-off and knock you off your mount. If you're dismounted before taking off, turn those features off: Beeline mounts you itself. Beeline tells you in chat when it happens, and if a trip ever gets stuck, it mounts you again or goes on the ground instead of hanging.
 
 **Why didn't it fly?**
 Flying needs all the aether currents of the zone, and the "Fly when the zone allows it" option. Otherwise you ride on the ground.

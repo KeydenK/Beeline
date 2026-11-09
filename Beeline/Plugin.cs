@@ -16,9 +16,10 @@ namespace Beeline;
 [Serializable]
 public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
 {
-    /// <summary>2: new defaults (Square/X closed the map and middle click is auto-run in game).</summary>
-    public int Version { get; set; } = 2;
+    /// <summary>2: new defaults (Square/X closed the map, middle click is auto-run). 3: no master switch any more.</summary>
+    public int Version { get; set; } = 3;
 
+    /// <summary>Old master switch (until version 2). Each input now has its own None / Off instead.</summary>
     public bool Enabled { get; set; } = true;
     /// <summary>The one button: aetheryte/shard under the cursor → go there; anywhere else → travel there.</summary>
     public GamepadButtons Button { get; set; } = GamepadButtons.South;
@@ -35,8 +36,12 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public VirtualKey Hotkey { get; set; } = VirtualKey.NO_KEY;
     public bool UseShardsForTravel { get; set; } = true;
     public bool AutoMount { get; set; } = true;
+    /// <summary>Old fixed "mount up when further than" distance; replaced by a time calculation.</summary>
     public int MountDistance { get; set; } = 40;
     public bool AllowFlying { get; set; } = true;
+    /// <summary>Which mount Beeline summons: a roulette, or one of your mounts (MountId).</summary>
+    public MountChoice MountKind { get; set; } = MountChoice.Roulette;
+    public uint MountId { get; set; }
     /// <summary>On foot (no mount on this trip): use Peloton if your job has it and it's ready, else Sprint if ready.</summary>
     public bool SpeedBuffs { get; set; } = true;
     /// <summary>How far from a quest mob to stop (yalms), so it does not pull it.</summary>
@@ -53,6 +58,21 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public int AethernetSamples { get; set; }
     public float RunSpeed { get; set; } = 6f;
     public int RunSamples { get; set; }
+    /// <summary>Running with Peloton kept up (physical ranged jobs can keep it on all the time out of combat).</summary>
+    public float PelotonSpeed { get; set; } = 7.2f;
+    public int PelotonSamples { get; set; }
+    /// <summary>Sprint, and Jog (which follows Sprint and lasts until you change zone or enter combat).</summary>
+    public float SprintSpeed { get; set; } = 7.8f;
+    public int SprintSamples { get; set; }
+    public float SprintSeconds { get; set; } = 10f;
+    public float JogSpeed { get; set; } = 7.2f;
+    public int JogSamples { get; set; }
+    /// <summary>How much longer vnavmesh's path on the ground is than the straight line (walls, stairs, cliffs).</summary>
+    public float Detour { get; set; } = 1.15f;
+    public int DetourSamples { get; set; }
+    /// <summary>From casting Mount Roulette to being on the mount (you keep moving meanwhile).</summary>
+    public float MountSeconds { get; set; } = 2f;
+    public int MountSamples { get; set; }
     public float RideSpeed { get; set; } = 9f;
     public int RideSamples { get; set; }
     public float FlySpeed { get; set; } = 11f;
@@ -61,14 +81,17 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public void ResetTimings()
     {
         TeleportSeconds = 12f; AethernetSeconds = 7f;
-        RunSpeed = 6f; RideSpeed = 9f; FlySpeed = 11f;
-        TeleportSamples = AethernetSamples = RunSamples = RideSamples = FlySamples = 0;
+        RunSpeed = 6f; PelotonSpeed = 7.2f; SprintSpeed = 7.8f; SprintSeconds = 10f; JogSpeed = 7.2f;
+        RideSpeed = 9f; FlySpeed = 11f; Detour = 1.15f; MountSeconds = 2f;
+        TeleportSamples = AethernetSamples = RunSamples = PelotonSamples = SprintSamples = JogSamples = RideSamples = FlySamples = DetourSamples = MountSamples = 0;
     }
 
     /// <summary>Write every press and trip step to the Dalamud log at Information level (else Debug).</summary>
     public bool LogPresses { get; set; } = false;
 }
 
+/// <summary>FlyingRoulette (1) is no longer in the game; kept so old settings load, treated as Roulette.</summary>
+public enum MountChoice { Roulette = 0, FlyingRoulette = 1, Specific = 2 }
 public enum MouseTrigger { Off = 0, Middle = 1, Back = 2, Forward = 3, Left = 4, Right = 5 }
 [Flags] public enum KeyMods { None = 0, Shift = 1, Ctrl = 2, Alt = 4 }
 
@@ -128,6 +151,19 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 Config.MouseMods   = KeyMods.Ctrl;
             }
             Config.Version = 2;
+            PluginInterface.SavePluginConfig(Config);
+        }
+        if (Config.Version < 3)
+        {
+            // The master switch is gone: if it was off, turn every input off instead, so nothing changes.
+            if (!Config.Enabled)
+            {
+                Config.Button      = GamepadButtons.None;
+                Config.MouseButton = MouseTrigger.Off;
+                Config.Hotkey      = VirtualKey.NO_KEY;
+                Config.Enabled     = true;
+            }
+            Config.Version = 3;
             PluginInterface.SavePluginConfig(Config);
         }
         Ipc     = new Ipc(PluginInterface);
@@ -257,7 +293,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
             if (Gamepad.Raw(Config.Button) == 0)
                 _awaitRelease = false;
         }
-        else if (Gamepad.Pressed(Config.Button) != 0
+        else if (Config.Button != GamepadButtons.None && Gamepad.Pressed(Config.Button) != 0
                  && (Config.ButtonHold == GamepadButtons.None || Config.ButtonHold == Config.Button || Gamepad.Raw(Config.ButtonHold) != 0))
         {
             padPressed = true;
@@ -267,7 +303,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         var mousePressed = MouseClicked(map);
         var keyPressed   = HotkeyWentDown();
 
-        if (!Config.Enabled || !(padPressed || mousePressed || keyPressed))
+        if (!(padPressed || mousePressed || keyPressed))
             return;
 
         if (now - _mapOpenedAt < IgnoreAfterOpenMs)

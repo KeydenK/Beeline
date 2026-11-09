@@ -197,6 +197,8 @@ internal sealed unsafe class Travel : IDisposable
         if (_phase != Phase.None)
             Plugin.Framework.Update -= OnUpdate;
         _phase = Phase.None;
+        _pathTask = null;
+        _heldPath = null;
         // Learned timings: one write to disk per trip, not one per measurement.
         if (_timingsChanged)
         {
@@ -221,7 +223,7 @@ internal sealed unsafe class Travel : IDisposable
                                          uint FirstTerritory = 0, uint ThenShard = 0, Vector2? ThenArrival = null);
 
     private enum Hop { None, Teleport, Aethernet }
-    private enum MoveMode { Run, Ride, Fly }
+    private enum MoveMode { Run, Peloton, Sprint, Jog, Ride, Fly }
 
     private Route? BestRoute(uint territory, Vector2 target, Vector2 here)
     {
@@ -242,6 +244,7 @@ internal sealed unsafe class Travel : IDisposable
         try { activeId = _p.Ipc.ActiveAetheryte(); } catch { /* ignore */ }
         var active = activeId != 0 ? places.ById(activeId) : null;
 
+        _legAfterHop = true; // every option below starts with a teleport or an aethernet hop
         foreach (var place in places.InTerritory(territory))
         {
             if (place.Position is not { } pos || !ui->IsAetheryteUnlocked(place.Id))
@@ -268,6 +271,7 @@ internal sealed unsafe class Travel : IDisposable
             }
         }
 
+        _legAfterHop = false;
         if (routes.Count == 0)
             return null;
         if (Config.LogPresses)
@@ -282,11 +286,73 @@ internal sealed unsafe class Travel : IDisposable
     /// </summary>
     private float LegSeconds(float distance, uint territory, bool alreadyMounted)
     {
-        var canMount = Config.AutoMount && CanMount(territory);
-        if (!canMount || (distance <= Config.MountDistance && !alreadyMounted))
-            return distance / Math.Max(1f, Config.RunSpeed);
-        var speed = Config.AllowFlying && CanFly(territory) ? Config.FlySpeed : Config.RideSpeed;
-        return distance / Math.Max(1f, speed);
+        var sameZone = territory == Plugin.ClientState.TerritoryType && !_legAfterHop;
+        if (alreadyMounted)
+            return MountedSeconds(distance, territory, summon: false);
+        var foot = FootSeconds(distance * Math.Max(1f, Config.Detour), sameZone);
+        if (!Config.AutoMount || !CanMount(territory))
+            return foot;
+        return Math.Min(foot, MountedSeconds(distance, territory, summon: true, sameZone));
+    }
+
+    /// <summary>
+    /// Seconds riding or flying a straight-line distance. With <paramref name="summon"/>, you first keep going on foot
+    /// while the mount is summoned (no standing still), then ride or fly the rest.
+    /// </summary>
+    private float MountedSeconds(float distance, uint territory, bool summon, bool sameZone = true)
+    {
+        var fly = Config.AllowFlying && CanFly(territory);
+        var speed = Math.Max(1f, fly ? Config.FlySpeed : Config.RideSpeed);
+        var detour = fly ? 1f : Math.Max(1f, Config.Detour); // flying goes (almost) straight
+        if (!summon)
+            return distance * detour / speed;
+        var footSpeed = FootSeconds(100f, sameZone) is var t && t > 0 ? 100f / t : Config.RunSpeed; // your speed on foot right now
+        var whileSummoning = footSpeed * Config.MountSeconds / Math.Max(1f, Config.Detour);         // straight-line ground covered meanwhile
+        if (distance <= whileSummoning)
+            return distance * Math.Max(1f, Config.Detour) / footSpeed;                            // there before the mount is
+        return Config.MountSeconds + (distance - whileSummoning) * detour / speed;
+    }
+
+    /// <summary>Summoning a mount gets you there sooner than staying on foot.</summary>
+    private bool MountIsFaster(float distance, uint territory)
+        => Config.AutoMount && CanMount(territory)
+           && MountedSeconds(distance, territory, summon: true) < FootSeconds(distance * Math.Max(1f, Config.Detour), sameZone: true) - 0.3f;
+
+    private bool _legAfterHop; // set while estimating legs that start after a teleport / aethernet (a zone change ends Jog)
+
+    /// <summary>
+    /// Seconds on foot for a path length: at Jog speed if you're jogging and staying in the zone; otherwise Sprint
+    /// (if ready) for its duration, then Jog; otherwise Peloton (if your job keeps it up) or plain running.
+    /// </summary>
+    private float FootSeconds(float path, bool sameZone)
+    {
+        var player = Plugin.ObjectTable.LocalPlayer;
+        var basic = Math.Max(1f, CanKeepPeloton() ? Math.Max(Config.PelotonSpeed, Config.RunSpeed) : Config.RunSpeed);
+        if (sameZone && player != null && player.StatusList.Any(st => st.StatusId == JogStatus))
+            return path / Math.Max(basic, Config.JogSpeed);
+        if (Config.SpeedBuffs && SprintReady())
+        {
+            var sprint = Math.Max(1f, Config.SprintSpeed);
+            var sprintPath = sprint * Config.SprintSeconds;
+            if (path <= sprintPath)
+                return path / sprint;
+            return Config.SprintSeconds + (path - sprintPath) / Math.Max(basic, Config.JogSpeed);
+        }
+        return path / basic;
+    }
+
+    private static bool SprintReady()
+        => ActionManager.Instance()->GetActionStatus(ActionType.GeneralAction, SprintGeneralAction) == 0;
+
+    /// <summary>
+    /// Physical ranged jobs (Archer, Bard, Machinist, Dancer) learn Peloton at level 20 and can keep it up the
+    /// whole way out of combat, so on-foot legs are estimated at Peloton speed for them.
+    /// </summary>
+    private bool CanKeepPeloton()
+    {
+        var player = Plugin.ObjectTable.LocalPlayer;
+        return Config.SpeedBuffs && player != null && player.Level >= 20 && !Plugin.Condition[ConditionFlag.InCombat]
+               && player.ClassJob.RowId is 5 or 23 or 31 or 38;
     }
 
     // ---------------- Learning from your trips ----------------
@@ -294,7 +360,6 @@ internal sealed unsafe class Travel : IDisposable
     private Hop _hop = Hop.None;                       // teleport / aethernet being timed
     private readonly Stopwatch _hopTime = new();
     private Vector2 _moveStart;                        // where vnavmesh started moving you
-    private MoveMode _moveMode;
     private readonly Stopwatch _moveTime = new();
 
     /// <summary>Running average that settles quickly at first, then keeps adapting a little.</summary>
@@ -330,11 +395,21 @@ internal sealed unsafe class Travel : IDisposable
         _wantMount = wantMount;
         _mountTries = 0;
         _mountAttempts = 0;
-        _speedTries = 0;
-        _mountDelayMs = _justArrived ? 1500 : 0;
-        _justArrived = false;
-        _usedBoost = player is Dalamud.Game.ClientState.Objects.Types.IBattleChara bc
-                     && bc.StatusList.Any(st => st.StatusId is SprintStatus or PelotonStatus);
+        _boostFails = 0;
+        _sprintUsed = false;
+        _sawSprint = _sawPeloton = false;
+        _allowRemount = false;
+        _heldPath = null;
+        _stuckStage = 0;
+        _stuckPos = player.Position;
+        _stuckTime.Restart();
+        _wasMounted = Plugin.Condition[ConditionFlag.Mounted] || Plugin.Condition[ConditionFlag.RidingPillion];
+        _wasInFlight = Plugin.Condition[ConditionFlag.InFlight];
+        Array.Clear(_bucketDist);
+        Array.Clear(_bucketTime);
+        _pathLength = 0;
+        _lastSample = player.Position;
+        _sampleClock.Restart();
         _sawFlying = fly;
         _sawMounted = Plugin.Condition[ConditionFlag.Mounted];
     }
@@ -345,44 +420,284 @@ internal sealed unsafe class Travel : IDisposable
     private bool _wantMount;      // summon a mount on the way
     private bool _sawFlying, _sawMounted;
     private int _mountAttempts;   // calls refused by the game (e.g. just after an instant action)
-    private int _speedTries;
-    private bool _usedBoost;      // Sprint/Peloton used on this move: don't learn running speed from it
-    private long _mountDelayMs;   // after a teleport / aethernet hop, give auto-mount plugins a moment first
-    private bool _justArrived;    // this move starts right after a teleport / aethernet hop
+    private int _boostFails;              // speed boost calls refused (nothing ready): stop after a while
+    private const uint JogStatus = 4209;
+
+    // Stuck watchdog: a trip must never hang (e.g. another plugin dismounts you while vnavmesh waits to take off).
+    private int _stuckStage;
+    private Vector3 _stuckPos;
+    private readonly Stopwatch _stuckTime = new();
+    private bool _wasMounted, _wasInFlight;
+    private const int StuckMs = 3000;
+
+    /// <summary>
+    /// Called while vnavmesh has a path. If you haven't moved for 5 s (and nothing legit is going on: path still being
+    /// computed, a cast, getting on a mount, waiting for the first mount), steps in: re-mount once if you got dismounted on
+    /// a flying path, then go on the ground instead, then re-send the path once, then stop the trip. Returns true if it acted.
+    /// </summary>
+    private bool Watchdog(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter player, ICondition c)
+    {
+        var mounted = c[ConditionFlag.Mounted] || c[ConditionFlag.RidingPillion];
+        var computing = _pathTask != null || _heldPath != null;
+        var legitWait = computing || c[ConditionFlag.Casting] || c[ConditionFlag.Casting87] || c[ConditionFlag.Mounting]
+                        || c[ConditionFlag.Mounting71] || c[ConditionFlag.MountOrOrnamentTransition]
+                        || (_flying && !mounted && !_sawMounted); // waiting for the first mount (has its own fallback)
+        if (legitWait || Vector3.Distance(player.Position, _stuckPos) > 1f)
+        {
+            _stuckPos = player.Position;
+            _stuckTime.Restart();
+            return false;
+        }
+        if (_stuckTime.ElapsedMilliseconds < StuckMs)
+            return false;
+        _stuckTime.Restart();
+
+        var here = Plugin.ClientState.TerritoryType;
+        if (_flying && !mounted && _stuckStage == 0 && Config.AutoMount && CanMount(here) && !c[ConditionFlag.InCombat])
+        {
+            _stuckStage = 1;
+            Plugin.Info($"{Plugin.Tag} Stuck: dismounted before taking off, mounting again");
+            SummonMount();
+            return true;
+        }
+        if (_flying && mounted && _stuckStage <= 1)
+        {
+            _stuckStage = 2;
+            Plugin.Info($"{Plugin.Tag} Stuck in the air: computing the route again from here");
+            try { _p.Ipc.NavStop(); SendMove(true, bridge: false); } catch { /* vnavmesh gone */ }
+            return true;
+        }
+        if (_flying && _stuckStage <= 2)
+        {
+            _stuckStage = 3;
+            _flying = false;
+            Plugin.Info($"{Plugin.Tag} Stuck: can't take off, going on the ground instead");
+            try { _p.Ipc.NavStop(); SendMove(false); } catch { /* vnavmesh gone */ }
+            return true;
+        }
+        if (_stuckStage <= 3)
+        {
+            _stuckStage = 4;
+            Plugin.Info($"{Plugin.Tag} Stuck: asking vnavmesh for the path again");
+            try { _p.Ipc.NavStop(); SendMove(_flying); } catch { /* vnavmesh gone */ }
+            return true;
+        }
+        Plugin.Info($"{Plugin.Tag} Stuck: trip stopped");
+        Cancel("stopped: stuck, couldn't move for a while");
+        return true;
+    }
+
+    // Speed sampling: distance and time per way of moving, measured in small slices during the move.
+    private readonly float[] _bucketDist = new float[6];
+    private readonly float[] _bucketTime = new float[6];
+    private float _pathLength;            // ground path actually walked/ridden (for the detour factor)
+    private Vector3 _lastSample;
+    private readonly Stopwatch _sampleClock = new();
+    private bool _sprintUsed;             // Sprint only once per move (long cooldown); Peloton is re-applied
+    private bool _sawSprint, _sawPeloton; // boosts seen during this move (for learning the right speed)
 
     private const uint PelotonAction = 7557, SprintGeneralAction = 4;
     private const uint SprintStatus = 50, PelotonStatus = 1199;
 
-    private void SendMove(bool fly)
+    // ---------------- Moving: compute the path in the background, move meanwhile ----------------
+
+    private System.Threading.Tasks.Task<List<Vector3>>? _pathTask; // path being computed by vnavmesh
+    private bool _pathFly;                                         // ...for flying
+    private bool _bridging, _bridgeFlying;                         // short move toward the target while it's computed
+    private Vector3 _bridgeEnd;
+    private List<Vector3>? _heldPath;                              // flying path ready, waiting for the mount to settle
+    private bool _allowRemount;                                    // the watchdog may cast the mount once more
+    private readonly Stopwatch _mountCastClock = new();            // since Beeline cast Mount Roulette (learns MountSeconds)
+    private static bool _warnedKnockOff;                           // chat explanation shown once per session
+
+    /// <summary>On the mount: ready to take off right away (Beeline doesn't slow down to suit other plugins).</summary>
+    private static bool MountSettled() => Mounted();
+    private readonly Stopwatch _pathClock = new();
+
+    /// <summary>
+    /// Asks vnavmesh for the path without waiting for it: long flying paths take several seconds to compute, so you
+    /// start toward the target right away (a few steps on foot while the mount is summoned, or taking off once mounted),
+    /// and the path takes over from where you are when it's ready.
+    /// </summary>
+    private void SendMove(bool fly, bool bridge = true)
     {
-        if (_destRange > 0) _p.Ipc.NavMoveCloseTo(_dest, fly, _destRange);
-        else _p.Ipc.NavMoveTo(_dest, fly);
+        var player = Plugin.ObjectTable.LocalPlayer;
+        if (player == null)
+            return;
+        _pathFly = fly;
+        _pathClock.Restart();
+        _pathFrom = player.Position;
+        _pathTask = _p.Ipc.NavPathfind(player.Position, _dest, fly, _destRange);
+        _bridging = _bridgeFlying = false;
+        if (fly && bridge)
+            Bridge(player);
+    }
+
+    private Vector3 _pathFrom; // where you were when the path was asked for
+
+    /// <summary>How far you are from the route (closest distance to any of its segments).</summary>
+    private static float DistanceToPath(List<Vector3> points, Vector3 pos)
+    {
+        var best = Vector3.Distance(points[0], pos);
+        for (var i = 1; i < points.Count; i++)
+        {
+            var a = points[i - 1];
+            var ab = points[i] - a;
+            var len2 = ab.LengthSquared();
+            var t = len2 > 0 ? Math.Clamp(Vector3.Dot(pos - a, ab) / len2, 0f, 1f) : 0f;
+            best = Math.Min(best, Vector3.Distance(a + ab * t, pos));
+        }
+        return best;
+    }
+
+    private void Bridge(Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    {
+        var to = Flat(_dest) - Flat(player.Position);
+        if (to.Length() < 5)
+            return;
+        var dir = Vector2.Normalize(to);
+        var mounted = Plugin.Condition[ConditionFlag.Mounted] || Plugin.Condition[ConditionFlag.RidingPillion];
+        var pos = player.Position;
+        if (mounted && !MountSettled())
+            return; // getting on the mount: don't jump yet, keep the current little walk
+        if (mounted)
+        {
+            // Take off and head up and toward the target, far enough to keep going until the path is ready.
+            var step = Math.Min(Math.Clamp(Config.FlySpeed * 2.5f, 30f, 150f), to.Length());
+            _bridgeEnd = new Vector3(pos.X + dir.X * step, pos.Y + 15, pos.Z + dir.Y * step);
+            _p.Ipc.NavFollow([_bridgeEnd], true);
+            _bridgeFlying = true;
+        }
+        else
+        {
+            // A few steps toward the target while the mount is summoned.
+            var step = Math.Min(Math.Clamp(Config.RunSpeed * 1.5f, 8f, 40f), to.Length());
+            _bridgeEnd = new Vector3(pos.X + dir.X * step, pos.Y, pos.Z + dir.Y * step);
+            _p.Ipc.NavFollow([_bridgeEnd], false);
+        }
+        _bridging = true;
     }
 
     /// <summary>
-    /// Speed toward the target as the crow flies (so detours around walls and cliffs are included), measured on
-    /// trips long enough to mean something.
+    /// Where you are on the route, if you're on it: the segment you're on, searched only along the part you could have
+    /// covered since the route was asked for (a later part that loops back near you, e.g. a way out from under a roof
+    /// that climbs back over it, must not be taken for your position). Returns the index of the next point to fly to.
     /// </summary>
-    private void LearnSpeed(Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    private int PositionOnRoute(List<Vector3> points, Vector3 pos)
     {
-        _moveMode = _sawFlying ? MoveMode.Fly : (_sawMounted || Plugin.Condition[ConditionFlag.Mounted]) ? MoveMode.Ride : MoveMode.Run;
-        var seconds = (float)_moveTime.Elapsed.TotalSeconds;
-        var distance = Vector2.Distance(_moveStart, Flat(player.Position));
-        if (seconds < 3 || distance < 20)
-            return;
-        var speed = distance / seconds;
-        if (speed is < 2 or > 40)
-            return;
-        switch (_moveMode)
+        var travelled = Vector3.Distance(_pathFrom, pos);
+        if (travelled < 3)
+            return 0; // haven't moved: the route starts right here
+        var reach = travelled * 1.5f + 10;
+        var along = 0f;
+        var bestIndex = -1;
+        var best = float.MaxValue;
+        for (var i = 1; i < points.Count && along <= reach; i++)
         {
-            case MoveMode.Run when _usedBoost:
-                return; // Sprint / Peloton: not your normal running speed
-            case MoveMode.Run:  Config.RunSpeed  = Blend(Config.RunSpeed,  Config.RunSamples++,  speed); break;
-            case MoveMode.Ride: Config.RideSpeed = Blend(Config.RideSpeed, Config.RideSamples++, speed); break;
-            case MoveMode.Fly:  Config.FlySpeed  = Blend(Config.FlySpeed,  Config.FlySamples++,  speed); break;
+            var a = points[i - 1];
+            var ab = points[i] - a;
+            var len2 = ab.LengthSquared();
+            var t = len2 > 0 ? Math.Clamp(Vector3.Dot(pos - a, ab) / len2, 0f, 1f) : 0f;
+            var d = Vector3.Distance(a + ab * t, pos);
+            if (d < best) { best = d; bestIndex = i; }
+            along += MathF.Sqrt(len2);
         }
-        Plugin.Info($"{Plugin.Tag} {_moveMode}: {speed:0.0} y/s over {distance:0} y");
-        _timingsChanged = true; // saved once, when the trip ends
+        return bestIndex;
+    }
+
+    /// <summary>The computed path is ready: follow it from where you are now. Returns false if there is no path.</summary>
+    private bool PathArrived(Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    {
+        var task = _pathTask!;
+        _pathTask = null;
+        if (!task.IsCompletedSuccessfully || task.Result is not { Count: > 0 } points)
+            return false;
+        if (_pathFly && !Plugin.Condition[ConditionFlag.InFlight] && !MountSettled() && (MountComing() || Mounted()))
+        {
+            _heldPath = points;
+            Plugin.Info($"{Plugin.Tag} Path ready after {_pathClock.Elapsed.TotalSeconds:0.0} s, waiting for the mount before taking off");
+            return true;
+        }
+        // The head-start move took you away from the planned route (it went in a straight line): rejoining it from here
+        // could go through walls or a roof, so compute the route again from where you are (once), hovering meanwhile.
+        // Join the route where you are (no recompute: on long routes that costs several seconds of hovering).
+        // If joining it ever runs into something (rare), the stuck watchdog recomputes from there.
+        FollowPath(points, player);
+        return true;
+    }
+
+    private void FollowPath(List<Vector3> points, Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    {
+        // Continue from where you are on the route; never shortcut it.
+        var next = Math.Max(0, PositionOnRoute(points, player.Position));
+        var route = next == 0 ? points : points.GetRange(next, points.Count - next);
+        Plugin.Info($"{Plugin.Tag} Following the path ({points.Count} points, starting at point {next}), {_pathClock.Elapsed.TotalSeconds:0.0} s after asking");
+        _p.Ipc.NavFollow(route, _pathFly);
+        _bridging = false;
+        _heldPath = null;
+    }
+
+    private static bool Mounted() => Plugin.Condition[ConditionFlag.Mounted] || Plugin.Condition[ConditionFlag.RidingPillion];
+
+    /// <summary>A mount is on its way (Beeline will summon one, or something is summoning it right now).</summary>
+    private bool MountComing()
+    {
+        var c = Plugin.Condition;
+        return (_wantMount && (!_sawMounted || _allowRemount))
+               || c[ConditionFlag.Mounting] || c[ConditionFlag.Mounting71] || c[ConditionFlag.MountOrOrnamentTransition];
+    }
+
+    /// <summary>Adds the slice since the last sample to the right speed bucket.</summary>
+    private void SampleSpeed(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter player, bool mounted, bool inFlight,
+                             bool hasSprint, bool hasJog, bool hasPeloton)
+    {
+        var dt = (float)_sampleClock.Elapsed.TotalSeconds;
+        _sampleClock.Restart();
+        var pos = player.Position;
+        var moved = inFlight ? Vector3.Distance(pos, _lastSample) : Vector2.Distance(Flat(pos), Flat(_lastSample));
+        _lastSample = pos;
+        if (dt is < 0.03f or > 1f || moved / dt < 1f)
+            return; // standing still (mount cast, path being computed...) doesn't count
+        var mode = inFlight ? MoveMode.Fly : mounted ? MoveMode.Ride
+                 : hasSprint ? MoveMode.Sprint : hasJog ? MoveMode.Jog : hasPeloton ? MoveMode.Peloton : MoveMode.Run;
+        _bucketDist[(int)mode] += moved;
+        _bucketTime[(int)mode] += dt;
+        if (!inFlight)
+            _pathLength += moved;
+    }
+
+    /// <summary>End of a move: learn each speed that was used long enough, and the ground detour factor.</summary>
+    private void LearnSpeeds(Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    {
+        void Learn(MoveMode mode, Func<float> get, Action<float> set, Func<int> samples, Action<int> setSamples)
+        {
+            var t = _bucketTime[(int)mode];
+            if (t < 2f)
+                return;
+            var speed = _bucketDist[(int)mode] / t;
+            if (speed is < 2 or > 200) // whatever your speed is, as long as it's a real measurement
+                return;
+            var n = samples();
+            set(Blend(get(), n, speed));
+            setSamples(n + 1);
+            Plugin.Info($"{Plugin.Tag} {mode}: {speed:0.0} y/s over {t:0.0} s");
+            _timingsChanged = true;
+        }
+        Learn(MoveMode.Run,     () => Config.RunSpeed,     v => Config.RunSpeed = v,     () => Config.RunSamples,     n => Config.RunSamples = n);
+        Learn(MoveMode.Peloton, () => Config.PelotonSpeed, v => Config.PelotonSpeed = v, () => Config.PelotonSamples, n => Config.PelotonSamples = n);
+        Learn(MoveMode.Sprint,  () => Config.SprintSpeed,  v => Config.SprintSpeed = v,  () => Config.SprintSamples,  n => Config.SprintSamples = n);
+        Learn(MoveMode.Jog,     () => Config.JogSpeed,     v => Config.JogSpeed = v,     () => Config.JogSamples,     n => Config.JogSamples = n);
+        Learn(MoveMode.Ride,    () => Config.RideSpeed,    v => Config.RideSpeed = v,    () => Config.RideSamples,    n => Config.RideSamples = n);
+        Learn(MoveMode.Fly,     () => Config.FlySpeed,     v => Config.FlySpeed = v,     () => Config.FlySamples,     n => Config.FlySamples = n);
+
+        // Detour: ground path walked vs straight line, on moves that stayed on the ground and went somewhere.
+        var straight = Vector2.Distance(_moveStart, Flat(player.Position));
+        if (!_sawFlying && _pathLength > 30 && straight > 20)
+        {
+            var detour = Math.Clamp(_pathLength / straight, 1f, 3f);
+            Config.Detour = Blend(Config.Detour, Config.DetourSamples++, detour);
+            _timingsChanged = true;
+        }
     }
 
     private void OnUpdate(IFramework framework)
@@ -464,7 +779,6 @@ internal sealed unsafe class Travel : IDisposable
                     Stop();
                     return;
                 }
-                _justArrived = _arrival != null; // came by teleport / aethernet (a zone change for auto-mount plugins)
                 SetPhase(Phase.WaitMesh);
                 return;
             }
@@ -480,7 +794,7 @@ internal sealed unsafe class Travel : IDisposable
                 var here = Plugin.ClientState.TerritoryType;
                 // Far away: summon a mount (on the way, or right here before taking off).
                 var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.RidingPillion] && !c[ConditionFlag.InCombat] && CanMount(here)
-                                && Vector2.Distance(Flat(player!.Position), _target) > Config.MountDistance;
+                                && MountIsFaster(Vector2.Distance(Flat(player!.Position), _target), here);
                 // Flying zone: ask for the flying path right away. vnavmesh waits in place until you're mounted, then
                 // takes off, so the path is computed while the mount is summoned (no re-planning mid-way, no going back).
                 var fly = Config.AllowFlying && CanFly(here) && (c[ConditionFlag.Mounted] || wantMount);
@@ -531,42 +845,90 @@ internal sealed unsafe class Travel : IDisposable
                     // Something else is already mounting you (another plugin's auto-mount, or you): leave it alone.
                     var mountingNow = c[ConditionFlag.Casting] || c[ConditionFlag.Casting87] || c[ConditionFlag.Mounting]
                                       || c[ConditionFlag.Mounting71] || c[ConditionFlag.MountOrOrnamentTransition];
-                    if (mounted && !_sawMounted)
-                        Plugin.Info($"{Plugin.Tag} Mounted {(_mountTries > 0 ? "by Beeline" : "by something else (another plugin or you)")}");
+                    var inFlight = c[ConditionFlag.InFlight];
+                    // Log every mount / take-off change during the move (helps when another plugin interferes).
+                    if (mounted != _wasMounted)
+                    {
+                        Plugin.Info($"{Plugin.Tag} {(mounted ? "Mounted" : "Dismounted")} {_moveTime.Elapsed.TotalSeconds:0.0} s into the move"
+                                    + (mounted ? $" (Beeline had summoned it: {(_mountTries > 0 ? "yes" : "no")})" : ""));
+                        if (mounted && _mountCastClock.IsRunning)
+                        {
+                            var took = (float)_mountCastClock.Elapsed.TotalSeconds;
+                            _mountCastClock.Reset();
+                            if (took is > 0.5f and < 8f)
+                            {
+                                Config.MountSeconds = Blend(Config.MountSeconds, Config.MountSamples++, took);
+                                _timingsChanged = true;
+                            }
+                        }
+                        // Knocked off before taking off: usually another plugin's mount module. Explain it once.
+                        if (!mounted && _flying && !inFlight && _sawMounted && !_warnedKnockOff)
+                        {
+                            _warnedKnockOff = true;
+                            Plugin.Chat.Print("Beeline: you were dismounted before taking off. This is usually another plugin's "
+                                            + "auto-mount, auto-dismount or cancel-mount-cast feature: turn it off for smooth trips, Beeline mounts you itself.");
+                        }
+                    }
+                    if (inFlight && !_wasInFlight)
+                        Plugin.Info($"{Plugin.Tag} Took off {_moveTime.Elapsed.TotalSeconds:0.0} s into the move");
+                    _wasMounted = mounted;
+                    _wasInFlight = inFlight;
                     _sawMounted |= mounted;
-                    _sawFlying |= c[ConditionFlag.InFlight];
+                    _sawFlying |= inFlight;
 
                     // Mount Roulette on the way: once, and once more after 2.5 s if it didn't take. A call the game
                     // refuses (e.g. right after an instant action) doesn't count; give up after ~3 s of refusals.
                     // Never once you've been mounted on this move: Mount Roulette while mounted would dismount you.
-                    if (_wantMount && !mounted && !_sawMounted && !mountingNow && !c[ConditionFlag.InCombat]
+                    if (_wantMount && !mounted && (!_sawMounted || _allowRemount) && !mountingNow && !c[ConditionFlag.InCombat]
                         && !c[ConditionFlag.InFlight] && !c[ConditionFlag.Jumping61] && _mountAttempts < 30
-                        && ((_mountTries == 0 && _moveTime.ElapsedMilliseconds >= _mountDelayMs)
-                            || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500 + _mountDelayMs)))
+                        && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500)))
                     {
-                        if (ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9))
+                        if (SummonMount())
+                        {
                             _mountTries++;
+                            _allowRemount = false;
+                            _mountCastClock.Restart();
+                        }
                         else
                             _mountAttempts++;
                     }
 
-                    // On foot for this trip: Peloton if your job has it and it's ready (out of combat only), else Sprint.
-                    if (Config.SpeedBuffs && !_wantMount && !mounted && !mountingNow && _speedTries < 10
-                        && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20
-                        && !player.StatusList.Any(st => st.StatusId is SprintStatus or PelotonStatus))
-                    {
-                        _speedTries++;
-                        var am = ActionManager.Instance();
-                        var used = !c[ConditionFlag.InCombat] && am->GetActionStatus(ActionType.Action, PelotonAction) == 0
-                                   && am->UseAction(ActionType.Action, PelotonAction);
-                        if (!used && am->GetActionStatus(ActionType.GeneralAction, SprintGeneralAction) == 0)
-                            used = am->UseAction(ActionType.GeneralAction, SprintGeneralAction);
-                        if (used)
+                    // Statuses that change your speed (read once per step).
+                    bool hasSprint = false, hasPeloton = false, hasJog = false;
+                    if (!mounted)
+                        foreach (var st in player.StatusList)
                         {
-                            _speedTries = 10;
-                            _usedBoost = true;
-                            Plugin.Info($"{Plugin.Tag} Used a speed boost (Peloton or Sprint)");
+                            if (st.StatusId == SprintStatus)
+                            {
+                                hasSprint = true;
+                                if (st.RemainingTime > Config.SprintSeconds) Config.SprintSeconds = st.RemainingTime; // its full duration
+                            }
+                            else if (st.StatusId == PelotonStatus) hasPeloton = true;
+                            else if (st.StatusId == JogStatus) hasJog = true;
                         }
+                    _sawSprint |= hasSprint;
+                    _sawPeloton |= hasPeloton;
+                    SampleSpeed(player, mounted, c[ConditionFlag.InFlight], hasSprint, hasJog, hasPeloton);
+
+                    // On foot: Sprint first (Jog follows it and lasts until you change zone or fight), otherwise keep
+                    // Peloton up if your job has it. Nothing while Sprint or Jog is already running.
+                    if (Config.SpeedBuffs && !mounted && !_wantMount && !mountingNow && !hasSprint && !hasJog && _boostFails < 20
+                        && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20)
+                    {
+                        var am = ActionManager.Instance();
+                        var used = false;
+                        if (!_sprintUsed && SprintReady() && am->UseAction(ActionType.GeneralAction, SprintGeneralAction))
+                        {
+                            used = _sprintUsed = true;
+                            Plugin.Info($"{Plugin.Tag} Sprint");
+                        }
+                        else if (!hasPeloton && !c[ConditionFlag.InCombat] && am->GetActionStatus(ActionType.Action, PelotonAction) == 0
+                                 && am->UseAction(ActionType.Action, PelotonAction))
+                        {
+                            used = true;
+                            Plugin.Info($"{Plugin.Tag} Peloton");
+                        }
+                        _boostFails = used || hasPeloton ? 0 : _boostFails + 1;
                     }
 
                     // Waiting on a flying path but the mount never came (refused, combat...): go on foot instead.
@@ -583,7 +945,7 @@ internal sealed unsafe class Travel : IDisposable
                     // Mounted by something else mid-way in a zone where you can fly: switch to flying. Stop first, so
                     // the new path starts from where you are (otherwise you keep going while it's computed, then turn back).
                     if (mounted && !_flying && Config.AllowFlying && CanFly(Plugin.ClientState.TerritoryType)
-                        && Vector2.Distance(Flat(player.Position), Flat(_dest)) > Config.MountDistance / 2f)
+                        && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 30f)
                     {
                         _flying = true;
                         Plugin.Info($"{Plugin.Tag} Mounted: flying the rest of the way");
@@ -593,11 +955,50 @@ internal sealed unsafe class Travel : IDisposable
                     }
                 }
 
+                // The path computed in the background is ready: follow it (or deal with "no path").
+                if (_pathTask != null && player != null)
+                {
+                    if (_pathTask.IsCompleted)
+                    {
+                        bool ok;
+                        try { ok = PathArrived(player); } catch { ok = false; }
+                        if (!ok)
+                        {
+                            if (_pathFly)
+                            {
+                                Plugin.Info($"{Plugin.Tag} No flying path found: trying on the ground");
+                                _flying = false;
+                                try { SendMove(false); } catch { Cancel("failed: vnavmesh is not available"); }
+                            }
+                            else
+                                Cancel("failed: vnavmesh found no path there");
+                            return;
+                        }
+                        _phaseTime.Restart();
+                    }
+                    else if (_pathFly && !_bridgeFlying && MountSettled())
+                    {
+                        try { Bridge(player); } catch { /* vnavmesh gone */ } // mounted and settled: take off while waiting
+                    }
+                    else if (_bridging && Vector3.Distance(player.Position, _bridgeEnd) < (_bridgeFlying ? 15f : 3f))
+                    {
+                        try { Bridge(player); } catch { /* vnavmesh gone */ } // keep going until the path is ready
+                    }
+                }
+                if (_heldPath != null && player != null
+                    && (MountSettled() || c[ConditionFlag.InFlight] || (!Mounted() && !MountComing())))
+                {
+                    try { FollowPath(_heldPath, player); } catch { _heldPath = null; }
+                    _phaseTime.Restart();
+                }
+
                 // Keep watching for your own movement until vnavmesh arrives (or gives up).
                 bool moving;
-                try { moving = _p.Ipc.NavMoving(); } catch { moving = false; }
+                try { moving = _pathTask != null || _heldPath != null || _p.Ipc.NavPathRunning(); } catch { moving = false; }
                 if (moving)
                     _navStarted = true;
+                if (moving && player != null && Watchdog(player, c))
+                    return;
                 if (!moving && _phaseTime.Elapsed.TotalSeconds > 1.5)
                 {
                     // Went to the marker but its NPC/object only loaded on the way: walk up to it now.
@@ -636,7 +1037,7 @@ internal sealed unsafe class Travel : IDisposable
                     }
 
                     if (_navStarted)
-                        LearnSpeed(player!);
+                        LearnSpeeds(player!);
                     Stop();
                     var left = Vector2.Distance(Flat(player!.Position), _target);
                     Plugin.Info(_navStarted
@@ -754,6 +1155,22 @@ internal sealed unsafe class Travel : IDisposable
     }
 
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
+
+    private const uint MountRouletteAction = 9;
+
+    /// <summary>
+    /// Summons the mount chosen in the settings: Mount Roulette, or one of your mounts (Mount Roulette if that one can't
+    /// be summoned here). Returns whether the game took it.
+    /// </summary>
+    private bool SummonMount()
+    {
+        var am = ActionManager.Instance();
+        if (Config.MountKind == MountChoice.Specific && Config.MountId != 0
+            && PlayerState.Instance()->IsMountUnlocked(Config.MountId) && _mountAttempts < 5
+            && am->UseAction(ActionType.Mount, Config.MountId))
+            return true;
+        return am->UseAction(ActionType.GeneralAction, MountRouletteAction);
+    }
 
     private static bool CanMount(uint territory)
         => Plugin.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t) && t.Mount;
