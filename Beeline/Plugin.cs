@@ -277,10 +277,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
             return;
 
         var tooltip   = ReadTooltip();
+        // A mouse click hides the tooltip before the button comes back up: use the one seen when it went down.
+        if (mousePressed && string.IsNullOrWhiteSpace(tooltip))
+            tooltip = _tooltipAtMouseDown;
         var territory = agent->SelectedTerritoryId;
         var mapId     = agent->SelectedMapId;
         // (coords: the decimal part is stored in tenths, 12.4 → 12 and 4; the ClientStructs helper divides by 100.)
-        Info($"{Tag} {(padPressed ? "Controller" : mousePressed ? "Mouse" : "Key")} on map: tooltip=\"{tooltip}\", territory={territory}, map={mapId}, cursor=({coords.X:0.00}, {coords.Y:0.00}){(_cursorMoved ? "" : " (not moved since the map opened)")}");
+        Info($"{Tag} {(padPressed ? "Controller" : mousePressed ? "Mouse" : "Key")} on map: tooltip=\"{tooltip}\", icon radius={IconHitRadius(map, agent):0} y, territory={territory}, map={mapId}, cursor=({coords.X:0.00}, {coords.Y:0.00}){(_cursorMoved ? "" : " (not moved since the map opened)")}");
 
         var places = Places;
         if (places == null)
@@ -312,7 +315,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         }
 
         // Anywhere else: quickest way there.
-        Travel.Start(territory, mapId, coords, tooltip, cursorStale: !_cursorMoved);
+        Travel.Start(territory, mapId, coords, tooltip, IconHitRadius(map, agent), cursorStale: !_cursorMoved);
     }
 
     private void AetheryteTeleport(Places places, Place main)
@@ -393,6 +396,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private bool _mouseWasDown;
     private bool _mouseDownOnMap;
     private System.Numerics.Vector2 _mouseDownAt;
+    private string _tooltipAtMouseDown = "";
     private bool _keyWasDown;
 
     private static bool GameHasFocus()
@@ -431,6 +435,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         {
             _mouseDownOnMap = MouseOverMap(map);
             _mouseDownAt = pos;
+            _tooltipAtMouseDown = _mouseDownOnMap ? ReadTooltip() : "";
         }
         else if (!down && _mouseWasDown)
         {
@@ -481,6 +486,21 @@ public sealed unsafe class Plugin : IDalamudPlugin
         MouseTrigger.Forward => "Forward side button",
         _ => "Off",
     };
+
+    /// <summary>
+    /// How much ground (yalms) a map icon covers around its centre: about 0.6 map units zoomed out and 0.2 zoomed in
+    /// (the values Lifestream uses for shards), halved on city maps, with some margin.
+    /// </summary>
+    private static float IconHitRadius(AddonAreaMap* map, AgentMap* agent)
+    {
+        var zoom = 0.5f;
+        var slider = map->ZoomSlider;
+        if (slider != null && slider->MaxValue > slider->MinValue)
+            zoom = Math.Clamp((slider->Value - slider->MinValue) / (float)(slider->MaxValue - slider->MinValue), 0f, 1f);
+        var mapUnits = 0.6f * (1 - zoom) + 0.2f * zoom;
+        var sizeFactor = agent->SelectedMapSizeFactorFloat > 0 ? agent->SelectedMapSizeFactorFloat : 1f;
+        return mapUnits * 50f / sizeFactor * 1.25f;
+    }
 
     private static string ReadTooltip()
     {

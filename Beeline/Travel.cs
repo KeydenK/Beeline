@@ -68,7 +68,7 @@ internal sealed unsafe class Travel : IDisposable
         Stop();
     }
 
-    public void Start(uint territory, uint mapId, Vector2 mapCoords, string tooltip, bool cursorStale = false)
+    public void Start(uint territory, uint mapId, Vector2 mapCoords, string tooltip, float iconWithin, bool cursorStale = false)
     {
         if (!Plugin.Data.GetExcelSheet<Lumina.Excel.Sheets.Map>().TryGetRow(mapId, out var map) || territory == 0)
             return;
@@ -78,7 +78,7 @@ internal sealed unsafe class Travel : IDisposable
             Places.MapToWorld(mapCoords.Y, map.SizeFactor, map.OffsetY));
 
         // A quest (or other game) marker at the cursor gives the exact spot, height and NPC/object.
-        var marker = QuestMarkers.Find(territory, target, tooltip);
+        var marker = QuestMarkers.Find(territory, target, tooltip, iconWithin);
         if (marker is { } mk)
         {
             Plugin.Info($"{Plugin.Tag} Marker \"{mk.Label}\" at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId}), {Vector2.Distance(target, new Vector2(mk.Position.X, mk.Position.Z)):0.0} y from the cursor");

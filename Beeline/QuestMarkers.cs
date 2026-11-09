@@ -14,10 +14,14 @@ internal readonly record struct MarkerHit(Vector3 Position, float Radius, uint D
 internal static unsafe class QuestMarkers
 {
     /// <summary>How close the cursor must be to a marker icon to pick it (yalms).</summary>
-    private const float IconWithin = 10f;
+    /// <summary>Smallest icon hit radius (yalms); the real one follows the map zoom, see <see cref="Find"/>.</summary>
+    private const float MinIconWithin = 10f;
 
-    public static MarkerHit? Find(uint territory, Vector2 cursor, string tooltip)
+    /// <param name="iconWithin">How far from an icon the cursor can be and still be "on" it (yalms): an icon covers more
+    /// ground on a zoomed-out map.</param>
+    public static MarkerHit? Find(uint territory, Vector2 cursor, string tooltip, float iconWithin)
     {
+        var IconWithin = MathF.Max(MinIconWithin, iconWithin);
         var map = GameMap.Instance();
         if (map == null)
             return null;
