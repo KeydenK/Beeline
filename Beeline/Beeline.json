@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Smarter routes: instead of fixed values, Beeline now times your own teleports, aethernet hops and mounting, and measures how fast you really get somewhere on foot, riding and flying, then picks the route with the shortest time. It gets better as you use it; see Advanced → Route timing. Also: clicking a quest marker with the mouse no longer misses it, and plain spots with several levels now prefer the level you're on."
+  "Changelog": "Lighter: the learned route timings are now saved once per trip instead of after every measurement. From 1.1.0: Beeline times your own teleports, aethernet hops and mounting and measures how fast you really travel on foot, riding and flying, then picks the route with the shortest time (see Advanced, Route timing)."
 }

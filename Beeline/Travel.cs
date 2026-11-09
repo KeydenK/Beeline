@@ -198,7 +198,15 @@ internal sealed unsafe class Travel : IDisposable
         if (_phase != Phase.None)
             Plugin.Framework.Update -= OnUpdate;
         _phase = Phase.None;
+        // Learned timings: one write to disk per trip, not one per measurement.
+        if (_timingsChanged)
+        {
+            _timingsChanged = false;
+            _p.SaveConfig();
+        }
     }
+
+    private bool _timingsChanged;
 
     private void SetPhase(Phase phase)
     {
@@ -302,12 +310,12 @@ internal sealed unsafe class Travel : IDisposable
             case Hop.Teleport when seconds is > 3 and < 45:
                 Config.TeleportSeconds = Blend(Config.TeleportSeconds, Config.TeleportSamples++, seconds);
                 Plugin.Info($"{Plugin.Tag} Teleport took {seconds:0.0} s (average now {Config.TeleportSeconds:0.0} s)");
-                _p.SaveConfig();
+                _timingsChanged = true; // saved once, when the trip ends
                 break;
             case Hop.Aethernet when seconds is > 2 and < 30:
                 Config.AethernetSeconds = Blend(Config.AethernetSeconds, Config.AethernetSamples++, seconds);
                 Plugin.Info($"{Plugin.Tag} Aethernet took {seconds:0.0} s (average now {Config.AethernetSeconds:0.0} s)");
-                _p.SaveConfig();
+                _timingsChanged = true; // saved once, when the trip ends
                 break;
         }
         _hop = Hop.None;
@@ -340,7 +348,7 @@ internal sealed unsafe class Travel : IDisposable
             case MoveMode.Fly:  Config.FlySpeed  = Blend(Config.FlySpeed,  Config.FlySamples++,  speed); break;
         }
         Plugin.Info($"{Plugin.Tag} {_moveMode}: {speed:0.0} y/s over {distance:0} y");
-        _p.SaveConfig();
+        _timingsChanged = true; // saved once, when the trip ends
     }
 
     private void OnUpdate(IFramework framework)
@@ -437,7 +445,7 @@ internal sealed unsafe class Travel : IDisposable
                     if (c[ConditionFlag.Mounted] && _mountTries > 0 && took is > 0.3f and < 6)
                     {
                         Config.MountSeconds = Blend(Config.MountSeconds, Config.MountSamples++, took);
-                        _p.SaveConfig();
+                        _timingsChanged = true; // saved once, when the trip ends
                     }
                     SetPhase(Phase.WaitMesh);
                     return;
