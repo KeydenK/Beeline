@@ -214,6 +214,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
         // PostUpdate only fires while the map window is open, so this reacts to the map
         // instead of polling every frame.
         AddonLifecycle.RegisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapUpdate);
+        // Safety net: right after a game patch Dalamud's window events can stay silent. Until one arrives, Beeline looks
+        // for the map itself (see OnFrameworkFallback); it turns itself off as soon as the events work.
+        Framework.Update += OnFrameworkFallback;
 
         Commands.AddHandler(Command, new CommandInfo(OnCommand)
         {
@@ -224,6 +227,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     public void Dispose()
     {
         AddonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapUpdate);
+        Framework.Update -= OnFrameworkFallback;
         Commands.RemoveHandler(Command);
         Travel.Dispose();
         _dismounter.Dispose();
@@ -291,9 +295,50 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private const int MapClosedGapMs = 200;
     private const int IgnoreAfterOpenMs = 500;
 
+    // ---------------- Fallback when Dalamud's window events don't arrive (e.g. right after a game patch) ----------------
+
+    private bool _mapEventsWork;      // a real map event arrived: the fallback is off for the session
+    private long _fallbackCheckedAt;
+    private bool _fallbackMapOpen;
+    private bool _fallbackAnnounced;
+
+    private void OnFrameworkFallback(IFramework framework)
+    {
+        if (_mapEventsWork)
+        {
+            Framework.Update -= OnFrameworkFallback;
+            return;
+        }
+        // Map closed: look for it at most 10 times a second. Open: run the usual map check every frame.
+        var now = Environment.TickCount64;
+        if (!_fallbackMapOpen && now - _fallbackCheckedAt < 100)
+            return;
+        _fallbackCheckedAt = now;
+        var map = (AddonAreaMap*)GameGui.GetAddonByName("AreaMap").Address;
+        _fallbackMapOpen = map != null && map->AtkUnitBase.IsVisible;
+        if (map == null)
+            return;
+        if (_fallbackMapOpen && !_fallbackAnnounced)
+        {
+            _fallbackAnnounced = true;
+            Log.Information($"{Tag} Map events aren't arriving (Dalamud not updated for this game patch yet?): watching the map directly until they do");
+        }
+        HandleMap(map);
+    }
+
     private void OnMapUpdate(AddonEvent type, AddonArgs args)
     {
-        var map = (AddonAreaMap*)args.Addon.Address;
+        if (!_mapEventsWork)
+        {
+            _mapEventsWork = true;
+            if (_fallbackAnnounced)
+                Log.Information($"{Tag} Map events work again: direct map watching turned off");
+        }
+        HandleMap((AddonAreaMap*)args.Addon.Address);
+    }
+
+    private void HandleMap(AddonAreaMap* map)
+    {
         if (map == null)
             return;
 

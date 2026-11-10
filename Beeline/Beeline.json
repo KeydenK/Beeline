@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Fix: a mouse click could go to a marker far from where you clicked when the map's tooltip still showed that marker's name from an earlier hover. Now the spot you point at wins; names only count for markers right under the cursor. Controller clicks use the same precise position as the mouse."
+  "Changelog": "Fix: map clicks did nothing when Dalamud's window events don't arrive (can happen with an unofficial Dalamud build right after a game patch, especially alongside other tools). Beeline now watches the map directly until the events work, then switches back by itself. No cost once the events work."
 }
