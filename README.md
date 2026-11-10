@@ -35,6 +35,9 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - **Quest enemies:** you stop at a **safe distance** (20 yalms by default) so you don't pull them by accident, unless they're far below your level and can't aggro you anyway. Enemies are never targeted.
   - **Layered places** (cities with several floors): the right floor is picked from the marker's height. For plain spots, the floor at your own height is preferred.
   - Works with active quests, new quests (the quest-giver icons), levequests, guildleves, Triple Triad and special NPCs.
+  - **Gathering:** in a gathering area, you walk up to the nearest gathering point.
+- **Also exact, not just quests:** FATEs, party members, your flag, housing plots, temporary markers (treasure maps...) and the map's own icons (shops, guilds, inns, exits...).
+- **Housing districts:** their aethernet shards are used too, from a shard of the same district.
   - **Quest journal:** open the map from a quest in the journal and press the button right away: the quest's marker is found by its name.
 - **Controller, mouse or keyboard, any button or combo:**
   - Controller: **Cross / A** by default. Any button works, and you can add a second button to hold for a combo (for example L2 + Cross).
@@ -95,6 +98,7 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 | Setting | What it does | Default |
 | --- | --- | --- |
 | Use aethernet shards to get closer | Routes may go through the aethernet shard closest to the spot | On |
+| Paid teleports on your current map (shards stay free) | Lets Beeline teleport (costs gil) to another aetheryte of the map you're already on when that's faster. Turn it off to save gil: on your current map it then only walks, rides, flies or takes the aethernet shards, which are free and always used | On |
 | Summon a mount when it's faster | Summoned while you keep moving, whenever riding or flying gets you there sooner than staying on foot (worked out from your learned speeds). Off if you'd rather mount yourself | On |
 | Mount | Mount Roulette, or any mount you've unlocked (searchable list) | Mount Roulette |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
@@ -194,8 +198,8 @@ Like every third-party tool, Dalamud plugins are against the game's terms of ser
 
 - **Spots without a marker** are only as precise as the map cursor (about 5 yalms). Quest markers are exact.
 - **Plain spots in layered places** (streets with walkways or roofs above) go to the floor at your own height when there is one there, otherwise to the highest one. Quest markers always pick the right floor.
-- **Residential district shards** (housing wards) and **airship landings** aren't used for routes.
-- **Gathering points** aren't walked to or targeted: gathering leves take you to the area.
+- **Airship landings** aren't used for routes (the game data has no position for them).
+- **Housing district shards** are only used when you're already standing at a shard of that district.
 - **Quest areas whose enemies are already there** before you arrive count as roaming enemies: you stop at the safe distance.
 - **Rebound movement keys:** only the default keys (W, A, S, D, Q, E, arrows) and the left stick cancel a trip.
 - **"Far below your level"** is set to 10 levels by default; the game's exact rule for when enemies stop aggroing you may differ. You can change it.

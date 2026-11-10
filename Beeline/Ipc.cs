@@ -14,6 +14,8 @@ internal sealed class Ipc
     private readonly ICallGateSubscriber<uint, bool>     _lsAethernetById;
     private readonly ICallGateSubscriber<uint, byte, bool> _lsTeleport;
     private readonly ICallGateSubscriber<object>         _lsAbort;
+    private readonly ICallGateSubscriber<uint>           _lsActiveResidential;
+    private readonly ICallGateSubscriber<uint, bool>     _lsHousingAethernet;
     private readonly ICallGateSubscriber<bool>           _navReady;
     private readonly ICallGateSubscriber<bool>           _navPathRunning;
     private readonly ICallGateSubscriber<bool>           _navPathfinding;
@@ -33,6 +35,8 @@ internal sealed class Ipc
         _lsAethernetById = pi.GetIpcSubscriber<uint, bool>("Lifestream.AethernetTeleportById");
         _lsTeleport      = pi.GetIpcSubscriber<uint, byte, bool>("Lifestream.Teleport");
         _lsAbort         = pi.GetIpcSubscriber<object>("Lifestream.Abort");
+        _lsActiveResidential = pi.GetIpcSubscriber<uint>("Lifestream.GetActiveResidentialAetheryte");
+        _lsHousingAethernet  = pi.GetIpcSubscriber<uint, bool>("Lifestream.HousingAethernetTeleportById");
         _navReady        = pi.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
         _navPathRunning  = pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning");
         _navPathfinding  = pi.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress");
@@ -51,6 +55,9 @@ internal sealed class Ipc
     public bool TeleportTo(uint aetheryteId)         => _lsTeleport.InvokeFunc(aetheryteId, 0);
     public void LifestreamCommand(string args)       => _lsExecute.InvokeAction(args);
     public void LifestreamAbort()                    => _lsAbort.InvokeAction();
+    /// <summary>Housing district shard you're standing at (HousingAethernet row), 0 if none.</summary>
+    public uint ActiveResidential()                  => _lsActiveResidential.InvokeFunc();
+    public bool ResidentialAethernetTo(uint housingAethernetId) => _lsHousingAethernet.InvokeFunc(housingAethernetId);
 
     public bool NavReady()   => _navReady.InvokeFunc();
     public bool NavMoving()  => _navPathRunning.InvokeFunc() || _navPathfinding.InvokeFunc();

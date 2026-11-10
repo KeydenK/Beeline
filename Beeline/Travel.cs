@@ -67,20 +67,22 @@ internal sealed unsafe class Travel : IDisposable
         Stop();
     }
 
-    public void Start(uint territory, uint mapId, Vector2 mapCoords, string tooltip, float iconWithin, bool cursorStale = false)
+    /// <param name="world">The spot under the mouse, worked out from the map's view (precise, works on an unfocused map);
+    /// null to use the game's cursor readout (<paramref name="mapCoords"/>).</param>
+    public void Start(uint territory, uint mapId, Vector2 mapCoords, string tooltip, float iconWithin, bool cursorStale = false, Vector2? world = null)
     {
         if (!Plugin.Data.GetExcelSheet<Lumina.Excel.Sheets.Map>().TryGetRow(mapId, out var map) || territory == 0)
             return;
 
-        var target = new Vector2(
+        var target = world ?? new Vector2(
             Places.MapToWorld(mapCoords.X, map.SizeFactor, map.OffsetX),
             Places.MapToWorld(mapCoords.Y, map.SizeFactor, map.OffsetY));
 
         // A quest (or other game) marker at the cursor gives the exact spot, height and NPC/object.
-        var marker = QuestMarkers.Find(territory, target, tooltip, iconWithin);
+        var marker = QuestMarkers.Find(territory, mapId, target, tooltip, iconWithin);
         if (marker is { } mk)
         {
-            Plugin.Info($"{Plugin.Tag} Marker \"{mk.Label}\" at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId}), {Vector2.Distance(target, new Vector2(mk.Position.X, mk.Position.Z)):0.0} y from the cursor");
+            Plugin.Info($"{Plugin.Tag} Marker \"{Plugin.Redact(mk.Label)}\" at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId}), {Vector2.Distance(target, new Vector2(mk.Position.X, mk.Position.Z)):0.0} y from the cursor");
             target = new Vector2(mk.Position.X, mk.Position.Z);
         }
         else if (cursorStale)
@@ -115,7 +117,7 @@ internal sealed unsafe class Travel : IDisposable
             return;
         }
 
-        Plugin.Info($"{Plugin.Tag} Travel to ({mapCoords.X:0.0}, {mapCoords.Y:0.0}) \"{tooltip}\" in territory {territory}: {route.Value.Describe}");
+        Plugin.Info($"{Plugin.Tag} Travel to ({mapCoords.X:0.0}, {mapCoords.Y:0.0}) \"{Plugin.Redact(tooltip)}\" in territory {territory}: {route.Value.Describe}");
         var r = route.Value;
         _territory  = r.ThenShard != 0 ? r.FirstTerritory : territory;
         _finalTerritory = territory;
@@ -124,7 +126,7 @@ internal sealed unsafe class Travel : IDisposable
         _endOnArrival   = false;
         _target     = target;
         _arrival    = r.Arrival;
-        _targetY    = marker?.Position.Y;
+        _targetY    = marker is { HasHeight: true } withHeight ? withHeight.Position.Y : null;
         _dataId     = marker?.DataId ?? 0;
         _radius     = marker?.Radius ?? 0;
         _approached = false;
@@ -244,11 +246,29 @@ internal sealed unsafe class Travel : IDisposable
         try { activeId = _p.Ipc.ActiveAetheryte(); } catch { /* ignore */ }
         var active = activeId != 0 ? places.ById(activeId) : null;
 
+        uint activeResidential = 0;
+        try { activeResidential = _p.Ipc.ActiveResidential(); } catch { /* ignore */ }
+        var atResidential = activeResidential != 0 ? places.Residential(activeResidential) : null;
+
         // Jog survives a teleport / aethernet hop that stays on the same map, not a change of map.
         var current = Plugin.ClientState.TerritoryType;
         foreach (var place in places.InTerritory(territory))
         {
-            if (place.Position is not { } pos || !ui->IsAetheryteUnlocked(place.Id))
+            if (place.Position is not { } pos)
+                continue;
+            if (place.Residential)
+            {
+                // Housing district shards: free hops, only from a shard of the same district.
+                if (Config.UseShardsForTravel && atResidential != null && atResidential.Group == place.Group && atResidential.Id != place.Id)
+                {
+                    var hid = place.Id;
+                    _legAfterHop = territory != current;
+                    routes.Add(new Route(Config.AethernetSeconds + LegSeconds(Vector2.Distance(pos, target), territory, alreadyMounted: false),
+                        $"aethernet to {place.Name}", pos, () => _p.Ipc.ResidentialAethernetTo(hid), Hop.Aethernet));
+                }
+                continue;
+            }
+            if (!ui->IsAetheryteUnlocked(place.Id))
                 continue;
             var restDistance = Vector2.Distance(pos, target);
             _legAfterHop = territory != current;
@@ -261,12 +281,14 @@ internal sealed unsafe class Travel : IDisposable
                 routes.Add(new Route(Config.AethernetSeconds + rest, $"aethernet to {name}", pos, () => _p.Ipc.AethernetTo(id), Hop.Aethernet));
             }
 
-            if (place.IsMain)
+            // Paid teleports to the map you're already on only if allowed (the aethernet above is free and always allowed).
+            var paidHopAllowed = Config.SameMapTeleport || territory != current;
+            if (place.IsMain && paidHopAllowed)
             {
                 var id = place.Id;
                 routes.Add(new Route(Config.TeleportSeconds + rest, $"teleport to {name}", pos, () => _p.Ipc.TeleportTo(id), Hop.Teleport));
             }
-            else if (Config.UseShardsForTravel && places.MasterOf(place) is { } master && ui->IsAetheryteUnlocked(master.Id))
+            else if (!place.IsMain && paidHopAllowed && Config.UseShardsForTravel && places.MasterOf(place) is { } master && ui->IsAetheryteUnlocked(master.Id))
             {
                 var m = master.Id;
                 _legAfterHop = territory != current || master.Territory != current;
@@ -1059,7 +1081,33 @@ internal sealed unsafe class Travel : IDisposable
 
     private static bool IsFriendlyInteractable(Dalamud.Game.ClientState.Objects.Types.IGameObject o)
         => o.IsTargetable && o.ObjectKind is Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc
-                                          or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj;
+                                          or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj
+                                          or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint;
+
+    /// <summary>
+    /// In an area marker with no NPC/object (gathering leves, fishing/mining areas...): the nearest gathering point you can
+    /// use there (nearest to you once you're inside the area).
+    /// </summary>
+    private Dalamud.Game.ClientState.Objects.Types.IGameObject? GatheringInArea()
+    {
+        if (_radius <= OnMarkerWithin + 1)
+            return null;
+        var player = Plugin.ObjectTable.LocalPlayer;
+        var inArea = player != null && Vector2.Distance(Flat(player.Position), _target) <= _radius + 10f;
+        var from = inArea ? Flat(player!.Position) : _target;
+        Dalamud.Game.ClientState.Objects.Types.IGameObject? best = null;
+        var bestDist = float.MaxValue;
+        foreach (var o in Plugin.ObjectTable)
+        {
+            if (o.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint || !o.IsTargetable)
+                continue;
+            if (Vector2.Distance(Flat(o.Position), _target) > _radius + 10f)
+                continue;
+            var d = Vector2.Distance(Flat(o.Position), from);
+            if (d < bestDist) { bestDist = d; best = o; }
+        }
+        return best;
+    }
 
     /// <summary>Within the game's talk/use distance (NPCs ~6 yalms, objects ~4.5, plus their size).</summary>
     private static bool InInteractRange(Dalamud.Game.ClientState.Objects.Types.IGameObject player, Dalamud.Game.ClientState.Objects.Types.IGameObject o)
@@ -1109,7 +1157,7 @@ internal sealed unsafe class Travel : IDisposable
     private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindMarkerObject()
     {
         if (_dataId == 0)
-            return ObjectOnMarker();
+            return ObjectOnMarker() ?? GatheringInArea();
         var player = Plugin.ObjectTable.LocalPlayer;
         var searchRadius = MathF.Max(60f, _radius + 20f);
         var inArea = player != null && _radius > 0 && Vector2.Distance(Flat(player.Position), _target) <= _radius + 10f;

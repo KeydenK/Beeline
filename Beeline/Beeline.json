@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "More accurate on foot: Sprint is counted as lasting 20 seconds out of combat, and route estimates now know that Jog stays when you teleport or take the aethernet on the same map (it only ends when you change map, mount up or fight)."
+  "Changelog": "Mouse clicks now work on an unfocused map: Beeline works out the spot under the mouse from the map's view itself, instead of the game's cursor position, which only updates while the map is focused. New option to save gil: turn off paid teleports on the map you're already on (the free aethernet shards are still used). Many more things are now hit exactly: FATEs, party members, your flag, housing plots, temporary markers (treasure maps...) and the map's own icons (shops, guilds, exits...). In gathering areas you walk up to the nearest gathering point, and housing district aethernet shards are used from a shard of the same district."
 }

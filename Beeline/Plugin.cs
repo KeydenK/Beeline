@@ -1,3 +1,4 @@
+using System.Numerics;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.ClientState.GamePad;
@@ -17,7 +18,7 @@ namespace Beeline;
 public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
 {
     /// <summary>2: new defaults (Square/X closed the map, middle click is auto-run). 3: no master switch any more.</summary>
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
 
     /// <summary>Old master switch (until version 2). Each input now has its own None / Off instead.</summary>
     public bool Enabled { get; set; } = true;
@@ -39,6 +40,10 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     /// <summary>Old fixed "mount up when further than" distance; replaced by a time calculation.</summary>
     public int MountDistance { get; set; } = 40;
     public bool AllowFlying { get; set; } = true;
+    /// <summary>Allow paid teleports to an aetheryte on the map you're already on (the aethernet is always allowed, it's free).</summary>
+    public bool SameMapTeleport { get; set; } = true;
+    /// <summary>Unused (an earlier test build calibrated the map view; the maths is now known).</summary>
+    public int MapCalibration { get; set; } = -1;
     /// <summary>Which mount Beeline summons: a roulette, or one of your mounts (MountId).</summary>
     public MountChoice MountKind { get; set; } = MountChoice.Roulette;
     public uint MountId { get; set; }
@@ -114,10 +119,29 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] internal static IObjectTable            ObjectTable     { get; private set; } = null!;
     [PluginService] internal static IKeyState               KeyState        { get; private set; } = null!;
     [PluginService] internal static ITargetManager          TargetManager   { get; private set; } = null!;
+    [PluginService] internal static IFateTable              Fates           { get; private set; } = null!;
+    [PluginService] internal static IPartyList              Party           { get; private set; } = null!;
 
     internal Configuration Config { get; }
     private static Configuration? _cfg;
     internal static bool Config_LogPresses => _cfg?.LogPresses == true;
+
+    /// <summary>Hides player names (party members, you) from text that goes to the log.</summary>
+    internal static string Redact(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+        foreach (var member in Party)
+        {
+            var name = member.Name.ToString();
+            if (name.Length > 0)
+                text = text.Replace(name, "(party member)");
+        }
+        var me = ObjectTable.LocalPlayer?.Name.ToString();
+        if (!string.IsNullOrEmpty(me))
+            text = text.Replace(me, "(you)");
+        return text;
+    }
 
     /// <summary>Trip details: visible in the normal log only when "Write each button press to the log" is on.</summary>
     internal static void Info(string message)
@@ -167,6 +191,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 Config.Enabled     = true;
             }
             Config.Version = 3;
+            PluginInterface.SavePluginConfig(Config);
+        }
+        if (Config.Version < 4)
+        {
+            // Same-map teleports are opt-out (a test build briefly had them off by default).
+            Config.SameMapTeleport = true;
+            Config.Version = 4;
             PluginInterface.SavePluginConfig(Config);
         }
         Ipc     = new Ipc(PluginInterface);
@@ -340,7 +371,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         var territory = agent->SelectedTerritoryId;
         var mapId     = agent->SelectedMapId;
         // (coords: the decimal part is stored in tenths, 12.4 → 12 and 4; the ClientStructs helper divides by 100.)
-        Info($"{Tag} {(padPressed ? "Controller" : mousePressed ? "Mouse" : "Key")} on map: tooltip=\"{tooltip}\", icon radius={IconHitRadius(map, agent):0} y, territory={territory}, map={mapId}, cursor=({coords.X:0.00}, {coords.Y:0.00}){(_cursorMoved ? "" : " (not moved since the map opened)")}");
+        Info($"{Tag} {(padPressed ? "Controller" : mousePressed ? "Mouse" : "Key")} on map: tooltip=\"{Redact(tooltip)}\", icon radius={IconHitRadius(map, agent):0} y, territory={territory}, map={mapId}, cursor=({coords.X:0.00}, {coords.Y:0.00}){(_cursorMoved ? "" : " (not moved since the map opened)")}");
 
         var places = Places;
         if (places == null)
@@ -359,9 +390,14 @@ public sealed unsafe class Plugin : IDalamudPlugin
         {
             if (places.FindShard(tooltip, territory) is { } shard)
             {
-                Travel.Cancel("replaced", quiet: true);
-                ShardTeleport(places, shard);
-                return;
+                // Housing district shard: the aethernet works only from a shard of that district; otherwise walk there.
+                if (!shard.Residential || ResidentialHop(shard))
+                {
+                    Travel.Cancel("replaced", quiet: true);
+                    if (!shard.Residential)
+                        ShardTeleport(places, shard);
+                    return;
+                }
             }
             if (places.FindMain(tooltip, territory) is { } main)
             {
@@ -372,7 +408,27 @@ public sealed unsafe class Plugin : IDalamudPlugin
         }
 
         // Anywhere else: quickest way there.
-        Travel.Start(territory, mapId, coords, tooltip, IconHitRadius(map, agent), cursorStale: !_cursorMoved);
+        // Mouse / keyboard: the spot under the mouse, worked out from the map's view. Works on an unfocused map too (the
+        // game only updates its cursor readout while the map is focused) and is more precise than that readout.
+        // Controller: the same maths at the map's crosshair (where the controller cursor points), if it's shown.
+        Vector2? world = null;
+        Vector2? pointer = padPressed ? CrosshairPoint(map) : MousePoint();
+        var what = padPressed ? "Crosshair" : "Mouse";
+        if (pointer is { } pt && Plugin.Data.GetExcelSheet<Lumina.Excel.Sheets.Map>().TryGetRow(mapId, out var mapRow)
+            && WorldAt(map, agent, mapRow, pt) is { } computed)
+        {
+            var readout = new Vector2(Places.MapToWorld(coords.X, mapRow.SizeFactor, mapRow.OffsetX), Places.MapToWorld(coords.Y, mapRow.SizeFactor, mapRow.OffsetY));
+            var diff = Vector2.Distance(computed, readout);
+            if (!padPressed || diff <= 10)
+            {
+                world = computed;
+                Info($"{Tag} {what} position ({computed.X:0.0}, {computed.Y:0.0}), {diff:0} y from the game's readout (which can be stale)");
+            }
+            else
+                Info($"{Tag} {what} position {diff:0} y from the game's readout: using the game's");
+        }
+
+        Travel.Start(territory, mapId, coords, tooltip, IconHitRadius(map, agent), cursorStale: !_cursorMoved && world == null, world: world);
     }
 
     private void AetheryteTeleport(Places places, Place main)
@@ -404,6 +460,23 @@ public sealed unsafe class Plugin : IDalamudPlugin
             Log.Warning($"{Tag} Lifestream call failed (is Lifestream installed and enabled?): {e.Message}");
             Chat.PrintError("Beeline: Lifestream is not available.");
         }
+    }
+
+    /// <summary>Takes the housing district aethernet if you're at one of that district's shards. False if you're not.</summary>
+    private bool ResidentialHop(Place shard)
+    {
+        try
+        {
+            var active = Ipc.ActiveResidential();
+            if (active == 0 || Places?.Residential(active) is not { } at || at.Group != shard.Group)
+                return false;
+            if (active == shard.Id) { Chat.Print("Beeline: you are already here."); return true; }
+            Info($"{Tag} Residential aethernet to {shard.Name} (#{shard.Id}) from #{active}");
+            if (!Ipc.ResidentialAethernetTo(shard.Id))
+                Chat.PrintError($"Beeline: could not take the aethernet to {shard.Name}.");
+            return true;
+        }
+        catch { return false; }
     }
 
     private void ShardTeleport(Places places, Place shard)
@@ -543,6 +616,50 @@ public sealed unsafe class Plugin : IDalamudPlugin
         MouseTrigger.Forward => "Forward side button",
         _ => "Off",
     };
+
+    /// <summary>The mouse position on the game window.</summary>
+    private static Vector2 MousePoint()
+        => Dalamud.Bindings.ImGui.ImGui.GetIO().MousePos - Dalamud.Bindings.ImGui.ImGui.GetMainViewport().Pos;
+
+    /// <summary>Centre of the map's crosshair on screen (shown with a controller), or null if it isn't shown.</summary>
+    private static Vector2? CrosshairPoint(AddonAreaMap* map)
+    {
+        var cross = map->CrosshairImageNode;
+        if (cross == null || !cross->AtkResNode.IsVisible())
+            return null;
+        var n = &cross->AtkResNode;
+        var scale = map->AtkUnitBase.Scale;
+        return new Vector2(n->ScreenX + n->Width * n->ScaleX * scale / 2f, n->ScreenY + n->Height * n->ScaleY * scale / 2f);
+    }
+
+    /// <summary>
+    /// The visible map image sits a little right of and below the middle of its frame (local units). Measured on
+    /// 189 cursor samples over Azys Lla, Limsa Lominsa and La Noscea at several zooms and window sizes.
+    /// </summary>
+    private static readonly Vector2 MapImageShift = new(11f, 20.5f);
+
+    /// <summary>
+    /// World position (X, Z) under a screen point of the map (the mouse, or the controller crosshair), from the map's view:
+    /// world = ((point - centre) / UI scale - image shift) / (zoom * map size) + scroll offset / map size - map offset.
+    /// Works whether the map is focused or not (the game's own cursor readout only updates while it's focused), and is
+    /// as precise as that readout (median 5 yalms off it, which is the readout's own rounding).
+    /// </summary>
+    private static Vector2? WorldAt(AddonAreaMap* map, AgentMap* agent, Lumina.Excel.Sheets.Map mapRow, Vector2 screenPoint)
+    {
+        var view = map->AreaMap.ComponentMap;
+        if (view == null || view->OwnerNode == null)
+            return null;
+        var node = &view->OwnerNode->AtkResNode;
+        var uiScale = map->AtkUnitBase.Scale;
+        var zoom = map->AreaMap.MapScale;
+        var size = agent->SelectedMapSizeFactorFloat;
+        if (uiScale <= 0 || zoom <= 0 || size <= 0)
+            return null;
+        var centre = new Vector2(node->ScreenX + node->Width * uiScale / 2f, node->ScreenY + node->Height * uiScale / 2f);
+        var local = (screenPoint - centre) / uiScale - MapImageShift;
+        var scroll = new Vector2(map->AreaMap.MapOffsetX, map->AreaMap.MapOffsetY);
+        return local / (zoom * size) + scroll / size - new Vector2(mapRow.OffsetX, mapRow.OffsetY);
+    }
 
     /// <summary>
     /// How much ground (yalms) a map icon covers around its centre: about 0.6 map units zoomed out and 0.2 zoomed in

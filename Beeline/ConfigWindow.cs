@@ -205,6 +205,9 @@ internal sealed unsafe class ConfigWindow : Window
     {
         Check("Use aethernet shards to get closer", () => Config.UseShardsForTravel, v => Config.UseShardsForTravel = v,
               "Routes may teleport to a city and take the aethernet to the shard closest to the spot.");
+        Check("Paid teleports on your current map (shards stay free)", () => Config.SameMapTeleport, v => Config.SameMapTeleport = v,
+              "On: Beeline may teleport (costs gil) to another aetheryte of the map you're already on when that's faster. "
+              + "Off, to save gil: on your current map it only walks, rides, flies, or takes the aethernet shards, which are free and always used.");
 
         ImGuiHelpers.ScaledDummy(4);
         Header("Mount and speed");
@@ -226,11 +229,20 @@ internal sealed unsafe class ConfigWindow : Window
     private List<(uint Id, string Name)>? _mounts; // your unlocked mounts, built when the list is opened
     private string _mountFilter = "";
 
-    private string MountLabel() => Config.MountKind switch
+    private uint _labelFor = uint.MaxValue;
+    private string _label = "Mount Roulette";
+
+    /// <summary>Name of the chosen mount, looked up only when the choice changes (not every frame).</summary>
+    private string MountLabel()
     {
-        MountChoice.Specific when Config.MountId != 0 => MountName(Config.MountId),
-        _ => "Mount Roulette",
-    };
+        var key = Config.MountKind == MountChoice.Specific ? Config.MountId : 0;
+        if (key != _labelFor)
+        {
+            _labelFor = key;
+            _label = key != 0 ? MountName(key) : "Mount Roulette";
+        }
+        return _label;
+    }
 
     private static string MountName(uint id)
     {
