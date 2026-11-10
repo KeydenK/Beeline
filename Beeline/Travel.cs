@@ -79,7 +79,7 @@ internal sealed unsafe class Travel : IDisposable
             Places.MapToWorld(mapCoords.Y, map.SizeFactor, map.OffsetY));
 
         // A quest (or other game) marker at the cursor gives the exact spot, height and NPC/object.
-        var marker = QuestMarkers.Find(territory, mapId, target, tooltip, iconWithin);
+        var marker = QuestMarkers.Find(territory, mapId, target, tooltip, iconWithin, cursorReliable: world != null);
         if (marker is { } mk)
         {
             Plugin.Info($"{Plugin.Tag} Marker \"{Plugin.Redact(mk.Label)}\" at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId}), {Vector2.Distance(target, new Vector2(mk.Position.X, mk.Position.Z)):0.0} y from the cursor");

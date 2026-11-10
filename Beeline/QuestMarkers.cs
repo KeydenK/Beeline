@@ -23,7 +23,9 @@ internal static unsafe class QuestMarkers
 
     /// <param name="iconWithin">How far from an icon the cursor can be and still be "on" it (yalms): an icon covers more
     /// ground on a zoomed-out map.</param>
-    public static MarkerHit? Find(uint territory, uint mapId, Vector2 cursor, string tooltip, float iconWithin)
+    /// <param name="cursorReliable">The cursor position was computed (mouse / crosshair), not the game's readout that can be
+    /// stale: then a name in the tooltip only counts for a marker near the cursor (the tooltip itself can linger).</param>
+    public static MarkerHit? Find(uint territory, uint mapId, Vector2 cursor, string tooltip, float iconWithin, bool cursorReliable = false)
     {
         var IconWithin = MathF.Max(MinIconWithin, iconWithin);
         MarkerHit? best = null;
@@ -55,6 +57,8 @@ internal static unsafe class QuestMarkers
                 ? name.Length > 0 && tooltip.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)
                 : (label.Length > 0 && tooltip.Contains(label)) || (name.Length > 0 && tooltip.Contains(name)));
             var inside = dist <= IconWithin || (radius > IconWithin && dist <= radius);
+            if (named && cursorReliable && dist > IconWithin * 2 && !(radius > IconWithin && dist <= radius))
+                named = false; // a lingering tooltip from somewhere else: trust where the cursor really is
             if (!inside && !named)
                 return;
             // Named first (nearest of that name), then icons right under the cursor, then big areas that merely contain it.

@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Mouse clicks now work on an unfocused map: Beeline works out the spot under the mouse from the map's view itself, instead of the game's cursor position, which only updates while the map is focused. New option to save gil: turn off paid teleports on the map you're already on (the free aethernet shards are still used). Many more things are now hit exactly: FATEs, party members, your flag, housing plots, temporary markers (treasure maps...) and the map's own icons (shops, guilds, exits...). In gathering areas you walk up to the nearest gathering point, and housing district aethernet shards are used from a shard of the same district."
+  "Changelog": "Fix: a mouse click could go to a marker far from where you clicked when the map's tooltip still showed that marker's name from an earlier hover. Now the spot you point at wins; names only count for markers right under the cursor. Controller clicks use the same precise position as the mouse."
 }
