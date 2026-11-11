@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Fix: map clicks did nothing when Dalamud's window events don't arrive (can happen with an unofficial Dalamud build right after a game patch, especially alongside other tools). Beeline now watches the map directly until the events work, then switches back by itself. No cost once the events work."
+  "Changelog": "Fix: on jobs with Peloton, Sprint and Peloton were cast at the same moment; Peloton now comes in during Sprint's last seconds and takes over when it ends. Fix: Beeline walked right up to quest NPCs and objects; it now stops at talking distance (and keeps your chosen distance from mobs). The \"write each press to the log\" option (Advanced) also notes whether the map events work."
 }

@@ -301,7 +301,7 @@ internal sealed unsafe class Travel : IDisposable
         _legAfterHop = false;
         if (routes.Count == 0)
             return null;
-        if (Config.LogPresses)
+        if (Plugin.Config_LogPresses)
             foreach (var r in routes.OrderBy(r => r.Cost).Take(6))
                 Plugin.Info($"{Plugin.Tag}   option: {r.Describe}: ~{r.Cost:0.0} s");
         return routes.MinBy(r => r.Cost);
@@ -522,6 +522,7 @@ internal sealed unsafe class Travel : IDisposable
     private readonly Stopwatch _sampleClock = new();
     private bool _sprintUsed;             // Sprint only once per move (long cooldown); Peloton is re-applied
     private bool _sawSprint, _sawPeloton; // boosts seen during this move (for learning the right speed)
+    private readonly System.Diagnostics.Stopwatch _sprintClock = new(); // since Sprint was used
 
     private const uint PelotonAction = 7557, SprintGeneralAction = 4;
     private const uint SprintStatus = 50, PelotonStatus = 1199;
@@ -658,10 +659,42 @@ internal sealed unsafe class Travel : IDisposable
         // Continue from where you are on the route; never shortcut it.
         var next = Math.Max(0, PositionOnRoute(points, player.Position));
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
+        // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
+        // End it where it first gets within the stop distance instead. Not when flying up to an NPC (it would stop in
+        // the air); mobs are kept at a distance either way.
+        if (_destRange > 0 && (!_pathFly || _destRange > 8f))
+            route = EndWithin(route, _dest, _destRange);
         Plugin.Info($"{Plugin.Tag} Following the path ({points.Count} points, starting at point {next}), {_pathClock.Elapsed.TotalSeconds:0.0} s after asking");
         _p.Ipc.NavFollow(route, _pathFly);
         _bridging = false;
         _heldPath = null;
+    }
+
+    /// <summary>The route cut where it first comes within <paramref name="range"/> of <paramref name="dest"/>.</summary>
+    private static List<Vector3> EndWithin(List<Vector3> route, Vector3 dest, float range)
+    {
+        for (var i = 0; i < route.Count; i++)
+        {
+            if (Vector3.Distance(route[i], dest) > range)
+                continue;
+            if (i == 0)
+                return route.GetRange(0, 1);
+            // Where on the segment from the previous point the distance drops to the range (the distance only falls
+            // there, since the previous point was outside it).
+            var a = route[i - 1];
+            var b = route[i];
+            float lo = 0, hi = 1;
+            for (var k = 0; k < 20; k++)
+            {
+                var mid = (lo + hi) / 2;
+                if (Vector3.Distance(Vector3.Lerp(a, b, mid), dest) > range) lo = mid;
+                else hi = mid;
+            }
+            var cut = route.GetRange(0, i);
+            cut.Add(Vector3.Lerp(a, b, hi));
+            return cut;
+        }
+        return route;
     }
 
     private static bool Mounted() => Plugin.Condition[ConditionFlag.Mounted] || Plugin.Condition[ConditionFlag.RidingPillion];
@@ -922,12 +955,14 @@ internal sealed unsafe class Travel : IDisposable
 
                     // Statuses that change your speed (read once per step).
                     bool hasSprint = false, hasPeloton = false, hasJog = false;
+                    var sprintLeft = 0f;
                     if (!mounted)
                         foreach (var st in player.StatusList)
                         {
                             if (st.StatusId == SprintStatus)
                             {
                                 hasSprint = true;
+                                sprintLeft = st.RemainingTime;
                                 if (st.RemainingTime > Config.SprintSeconds) Config.SprintSeconds = st.RemainingTime; // its full duration
                             }
                             else if (st.StatusId == PelotonStatus) hasPeloton = true;
@@ -938,15 +973,20 @@ internal sealed unsafe class Travel : IDisposable
                     SampleSpeed(player, mounted, c[ConditionFlag.InFlight], hasSprint, hasJog, hasPeloton);
 
                     // On foot: Sprint first (Jog follows it and lasts until you change map, mount up or fight), otherwise keep
-                    // Peloton up if your job has it. Nothing while Sprint or Jog is already running.
-                    if (Config.SpeedBuffs && !mounted && !_wantMount && !mountingNow && !hasSprint && !hasJog && _boostFails < 20
+                    // Peloton up if your job has it. Nothing while Jog runs, nor while Sprint runs except in its last 2 s
+                    // (Peloton then takes over the moment Sprint ends), nor right after using Sprint (its effect takes
+                    // a moment to show up: Peloton would otherwise be cast on top of it).
+                    var sprintPending = _sprintUsed && !hasSprint && _sprintClock.ElapsedMilliseconds < 2000;
+                    if (Config.SpeedBuffs && !mounted && !_wantMount && !mountingNow && (!hasSprint || sprintLeft <= 2f) && !sprintPending
+                        && !hasJog && _boostFails < 20
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20)
                     {
                         var am = ActionManager.Instance();
                         var used = false;
-                        if (!_sprintUsed && SprintReady() && am->UseAction(ActionType.GeneralAction, SprintGeneralAction))
+                        if (!_sprintUsed && !hasSprint && SprintReady() && am->UseAction(ActionType.GeneralAction, SprintGeneralAction))
                         {
                             used = _sprintUsed = true;
+                            _sprintClock.Restart();
                             Plugin.Info($"{Plugin.Tag} Sprint");
                         }
                         else if (!hasPeloton && !c[ConditionFlag.InCombat] && am->GetActionStatus(ActionType.Action, PelotonAction) == 0
@@ -1076,7 +1116,6 @@ internal sealed unsafe class Travel : IDisposable
         }
     }
 
-    private const float ApproachRange = 2.5f;
     private const float OnMarkerWithin = 4f;
 
     private static bool IsFriendlyInteractable(Dalamud.Game.ClientState.Objects.Types.IGameObject o)
@@ -1138,11 +1177,14 @@ internal sealed unsafe class Travel : IDisposable
         return best;
     }
 
-    /// <summary>Walk right up to NPCs and objects; stay at a safe distance from mobs. Nothing is targeted.</summary>
+    /// <summary>
+    /// Stop within talking/using distance of NPCs and objects (a little inside the game's limit: NPCs ~6 yalms, objects
+    /// ~4.5, plus their size), not nose to nose; stay at a safe distance from mobs.
+    /// </summary>
     private float StopDistance(Dalamud.Game.ClientState.Objects.Types.IGameObject obj)
     {
         if (obj is not Dalamud.Game.ClientState.Objects.Types.IBattleNpc mob)
-            return ApproachRange;
+            return obj.HitboxRadius + (obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc ? 4.5f : 3f);
         // Far below your level, mobs don't aggro: walk right up to them (melee range).
         var player = Plugin.ObjectTable.LocalPlayer;
         if (Config.IgnoreLowLevelMobs && player != null && player.Level >= mob.Level + Config.NoAggroLevelGap)

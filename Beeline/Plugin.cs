@@ -124,7 +124,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
     internal Configuration Config { get; }
     private static Configuration? _cfg;
-    internal static bool Config_LogPresses => _cfg?.LogPresses == true;
+    /// <summary>Detailed log: the "write each press" option, or always in a dev build (testing).</summary>
+    internal static bool Config_LogPresses => _cfg?.LogPresses == true || PluginInterface.IsDev;
 
     /// <summary>Hides player names (party members, you) from text that goes to the log.</summary>
     internal static string Redact(string text)
@@ -146,7 +147,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     /// <summary>Trip details: visible in the normal log only when "Write each button press to the log" is on.</summary>
     internal static void Info(string message)
     {
-        if (_cfg?.LogPresses == true) Log.Information(message);
+        if (Config_LogPresses) Log.Information(message);
         else Log.Debug(message);
     }
     internal readonly Ipc Ipc;
@@ -333,6 +334,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
             _mapEventsWork = true;
             if (_fallbackAnnounced)
                 Log.Information($"{Tag} Map events work again: direct map watching turned off");
+            else
+                Info($"{Tag} Map events work: the safety net isn't needed");
         }
         HandleMap((AddonAreaMap*)args.Addon.Address);
     }
