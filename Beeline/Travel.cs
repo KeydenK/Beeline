@@ -227,17 +227,49 @@ internal sealed unsafe class Travel : IDisposable
     private bool _timingsChanged;
 
     private nint _tripTarget; // target when last checked (raw pointer: nothing else to do until it changes)
+    private FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* _tripEnemy; // targeted enemy, not yet in range
+    private float _enemyStopRange;  // stop once it's this close (edge to edge); from Giddy Up's settings
+    private bool _giddyUpDismounts; // Giddy Up dismounts you for enemies (asked when the trip starts)
 
-    /// <summary>You just targeted something you can attack (as the game decides: auto-attack would work on it).</summary>
-    private bool EnemyNewlyTargeted()
+    /// <summary>
+    /// "Stop the trip when you target an enemy": with Giddy Up, once the enemy is within your attack range as Giddy Up
+    /// works it out from its settings (melee option included), or at once if it's set to "as soon as you target it".
+    /// Without Giddy Up, at once. Mounted with Giddy Up's enemy dismount on, Giddy Up gets you off in range (landing
+    /// early when flying) and that ends the trip. Checked 10 times a second; a pointer compare unless an enemy is
+    /// targeted.
+    /// </summary>
+    private bool EnemyStopsTrip()
     {
         var raw = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target;
-        if (raw == _tripTarget)
+        if (raw != _tripTarget)
+        {
+            _tripTarget = raw;
+            _tripEnemy = null;
+            var t = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)raw;
+            if (t == null || t->ObjectKind != FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc
+                || t->IsDead() || !ActionManager.CanUseActionOnTarget(7, t))
+                return false;
+            _enemyStopRange = _p.Companion?.GiddyUpEnemyStopRange() ?? -1f;
+            if (_enemyStopRange < 0)
+                return true;
+            _tripEnemy = t;
+            Plugin.Info($"{Plugin.Tag} Enemy targeted: the trip stops once it's within {_enemyStopRange:0} y");
+        }
+        if (_tripEnemy == null)
             return false;
-        _tripTarget = raw;
-        var t = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)raw;
-        return t != null && t->ObjectKind == FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc
-               && !t->IsDead() && ActionManager.CanUseActionOnTarget(7, t);
+        if (_tripEnemy->IsDead())
+        {
+            _tripEnemy = null;
+            return false;
+        }
+        var c = Plugin.Condition;
+        if (_giddyUpDismounts && (c[ConditionFlag.Mounted] || c[ConditionFlag.RidingPillion]))
+            return false; // Giddy Up dismounts you in range, which ends the trip
+        var me = FFXIVClientStructs.FFXIV.Client.Game.Control.Control.GetLocalPlayer();
+        if (me == null)
+            return false;
+        var gap = Vector3.Distance(me->Position, _tripEnemy->Position) - me->HitboxRadius - _tripEnemy->HitboxRadius;
+        return gap <= _enemyStopRange;
     }
 
     private void SetPhase(Phase phase)
@@ -246,6 +278,8 @@ internal sealed unsafe class Travel : IDisposable
         {
             _giddyUpBoosts = _p.Companion?.GiddyUpBoosts() == true;
             _tripTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // already targeted: doesn't count
+            _tripEnemy = null;
+            _giddyUpDismounts = _p.Companion?.GiddyUpEnemyDismount() == true;
             _p.Companion?.TripStarted();
         }
         _phase = phase;
@@ -846,9 +880,9 @@ internal sealed unsafe class Travel : IDisposable
             Cancel("stopped (combat)", quiet: true);
             return;
         }
-        if (Config.StopOnEnemyTarget && EnemyNewlyTargeted())
+        if (Config.StopOnEnemyTarget && EnemyStopsTrip())
         {
-            Plugin.Info($"{Plugin.Tag} You targeted an enemy: trip stopped");
+            Plugin.Info($"{Plugin.Tag} Enemy targeted{(_tripEnemy != null ? " and in range" : "")}: trip stopped");
             Cancel("stopped (enemy targeted)", quiet: true);
             return;
         }

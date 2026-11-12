@@ -19,6 +19,7 @@ internal sealed class Companion : IDisposable
     private readonly ICallGateProvider<object> _tripStarted, _tripEnded;
     private readonly ICallGateSubscriber<bool> _guBoosts, _guEnemy;
     private readonly ICallGateSubscriber<object> _guDismounted;
+    private readonly ICallGateSubscriber<float> _guStopRange;
 
     public Companion(Plugin p)
     {
@@ -36,6 +37,7 @@ internal sealed class Companion : IDisposable
         _guBoosts     = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesSpeedBuffs");
         _guEnemy      = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesEnemyDismount");
         _guDismounted = pi.GetIpcSubscriber<object>("GiddyUp.DismountedForCombat");
+        _guStopRange  = pi.GetIpcSubscriber<float>("GiddyUp.EnemyStopRange");
         _guDismounted.Subscribe(OnGiddyUpDismounted);
     }
 
@@ -60,6 +62,16 @@ internal sealed class Companion : IDisposable
     internal bool GiddyUpBoosts() => Ask(_guBoosts);
     /// <summary>Giddy Up is loaded and dismounts you for enemies itself (asked once per mount).</summary>
     internal bool GiddyUpEnemyDismount() => Ask(_guEnemy);
+
+    /// <summary>
+    /// How close a targeted enemy must be before a trip stops: your attack range per Giddy Up's settings, or -1 =
+    /// at once (Giddy Up set to "as soon as you target it", or not installed). Asked once per targeted enemy.
+    /// </summary>
+    internal float GiddyUpEnemyStopRange()
+    {
+        try { return _guStopRange.InvokeFunc(); }
+        catch { return -1f; }
+    }
 
     private static bool Ask(ICallGateSubscriber<bool> gate)
     {

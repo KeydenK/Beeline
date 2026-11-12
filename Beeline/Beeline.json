@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Works with Giddy Up (new companion plugin): when it's installed it handles Sprint, Peloton and dismounting for enemies during your trips, Beeline shares its learned speeds with it, and a trip ends when Giddy Up gets you off your mount for a fight. Entering combat now always stops a trip, and a new option (on by default) also stops it when you target an enemy, so you or a rotation plugin can start the fight."
+  "Changelog": "Works with Giddy Up (new companion plugin): when it's installed it handles Sprint, Peloton and dismounting for enemies during your trips, Beeline shares its learned speeds with it, and a trip ends when Giddy Up gets you off your mount for a fight. Entering combat now always stops a trip, and a new option (on by default) also stops it when you target an enemy (with Giddy Up: once that enemy is within your attack range), so you or a rotation plugin can start the fight."
 }
