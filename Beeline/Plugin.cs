@@ -157,6 +157,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
     internal Travel Travel { get; }
     private bool _placesErrorShown;
     private readonly Dismounter _dismounter;
+    /// <summary>Link with Giddy Up (null for the few ms before it's created).</summary>
+    internal Companion? Companion { get; private set; }
 
     private readonly WindowSystem _windows = new("Beeline");
     private readonly ConfigWindow _configWindow;
@@ -205,6 +207,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         _places = System.Threading.Tasks.Task.Run(() => new Places(Data));
         Travel  = new Travel(this);
         _dismounter = new Dismounter(this);
+        Companion   = new Companion(this);
 
         _configWindow = new ConfigWindow(this);
         _windows.AddWindow(_configWindow);
@@ -230,6 +233,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         AddonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapUpdate);
         Framework.Update -= OnFrameworkFallback;
         Commands.RemoveHandler(Command);
+        Companion?.Dispose();
         Travel.Dispose();
         _dismounter.Dispose();
         PluginInterface.UiBuilder.Draw         -= _windows.Draw;

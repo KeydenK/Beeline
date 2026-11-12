@@ -52,6 +52,18 @@ internal sealed unsafe class Travel : IDisposable
 
     private Configuration Config => _p.Config;
     public bool IsActive => _phase != Phase.None;
+
+    /// <summary>
+    /// For Giddy Up: true during a trip unless the current leg is on foot (moving, no mount planned). Before the
+    /// move starts (teleporting, waiting for vnavmesh) the leg isn't decided yet, so it counts as "will mount".
+    /// </summary>
+    public bool WillMount => _phase != Phase.None && (_phase != Phase.Moving || _wantMount
+                             || Plugin.Condition[ConditionFlag.Mounted] || Plugin.Condition[ConditionFlag.RidingPillion]);
+
+    /// <summary>Giddy Up uses Sprint/Peloton itself (asked when the trip starts): Beeline then doesn't.</summary>
+    private bool _giddyUpBoosts;
+    /// <summary>Sprint/Peloton will be used on foot, by Beeline or by Giddy Up (for time estimates).</summary>
+    private bool BoostsOn => Config.SpeedBuffs || _giddyUpBoosts;
     public string Status => _phase switch
     {
         Phase.Arriving => "Teleporting...",
@@ -196,7 +208,8 @@ internal sealed unsafe class Travel : IDisposable
 
     private void Stop()
     {
-        if (_phase != Phase.None)
+        var wasActive = _phase != Phase.None;
+        if (wasActive)
             Plugin.Framework.Update -= OnUpdate;
         _phase = Phase.None;
         _pathTask = null;
@@ -207,12 +220,19 @@ internal sealed unsafe class Travel : IDisposable
             _timingsChanged = false;
             _p.SaveConfig();
         }
+        if (wasActive)
+            _p.Companion?.TripEnded();
     }
 
     private bool _timingsChanged;
 
     private void SetPhase(Phase phase)
     {
+        if (_phase == Phase.None && phase != Phase.None)
+        {
+            _giddyUpBoosts = _p.Companion?.GiddyUpBoosts() == true;
+            _p.Companion?.TripStarted();
+        }
         _phase = phase;
         _phaseTime.Restart();
     }
@@ -357,7 +377,7 @@ internal sealed unsafe class Travel : IDisposable
         var basic = Math.Max(1f, CanKeepPeloton() ? Math.Max(Config.PelotonSpeed, Config.RunSpeed) : Config.RunSpeed);
         if (sameZone && player != null && player.StatusList.Any(st => st.StatusId == JogStatus))
             return path / Math.Max(basic, Config.JogSpeed);
-        if (Config.SpeedBuffs && SprintReady())
+        if (BoostsOn && SprintReady())
         {
             var sprint = Math.Max(1f, Config.SprintSpeed);
             var sprintPath = sprint * Config.SprintSeconds;
@@ -378,7 +398,7 @@ internal sealed unsafe class Travel : IDisposable
     private bool CanKeepPeloton()
     {
         var player = Plugin.ObjectTable.LocalPlayer;
-        return Config.SpeedBuffs && player != null && player.Level >= 20 && !Plugin.Condition[ConditionFlag.InCombat]
+        return BoostsOn && player != null && player.Level >= 20 && !Plugin.Condition[ConditionFlag.InCombat]
                && player.ClassJob.RowId is 5 or 23 or 31 or 38;
     }
 
@@ -803,6 +823,13 @@ internal sealed unsafe class Travel : IDisposable
         }
         if (_phase != Phase.Arriving && player == null)
             return; // loading screen
+        // A fight ends the trip (targeting an enemy alone doesn't: that may be a stray tab-target).
+        if (c[ConditionFlag.InCombat])
+        {
+            Plugin.Info($"{Plugin.Tag} You entered combat: trip stopped");
+            Cancel("stopped (combat)", quiet: true);
+            return;
+        }
 
         switch (_phase)
         {
@@ -977,7 +1004,7 @@ internal sealed unsafe class Travel : IDisposable
                     // (Peloton then takes over the moment Sprint ends), nor right after using Sprint (its effect takes
                     // a moment to show up: Peloton would otherwise be cast on top of it).
                     var sprintPending = _sprintUsed && !hasSprint && _sprintClock.ElapsedMilliseconds < 2000;
-                    if (Config.SpeedBuffs && !mounted && !_wantMount && !mountingNow && (!hasSprint || sprintLeft <= 2f) && !sprintPending
+                    if (Config.SpeedBuffs && !_giddyUpBoosts && !mounted && !_wantMount && !mountingNow && (!hasSprint || sprintLeft <= 2f) && !sprintPending
                         && !hasJog && _boostFails < 20
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20)
                     {

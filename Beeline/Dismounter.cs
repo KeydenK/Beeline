@@ -17,6 +17,7 @@ internal sealed unsafe class Dismounter : IDisposable
     private readonly Plugin _p;
     private bool _watching;
     private nint _lastTarget;
+    private bool _giddyUpHandles; // Giddy Up dismounts you for enemies (asked once per mount): leave it to it
 
     public Dismounter(Plugin p)
     {
@@ -45,6 +46,7 @@ internal sealed unsafe class Dismounter : IDisposable
         if (_watching) return;
         _watching = true;
         _lastTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // an enemy already targeted doesn't count
+        _giddyUpHandles = _p.Companion?.GiddyUpEnemyDismount() == true;
         Plugin.Framework.Update += OnUpdate;
     }
 
@@ -65,7 +67,7 @@ internal sealed unsafe class Dismounter : IDisposable
         var target = Plugin.TargetManager.Target;
 
         // An enemy = a battle NPC you could auto-attack (action 7), as the game itself decides.
-        if (!_p.Config.DismountOnEnemy || target is not IBattleNpc npc
+        if (!_p.Config.DismountOnEnemy || _giddyUpHandles || target is not IBattleNpc npc
             || !ActionManager.CanUseActionOnTarget(7, (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)npc.Address))
             return;
 

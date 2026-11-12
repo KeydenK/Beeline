@@ -20,7 +20,7 @@ internal sealed unsafe class ConfigWindow : Window
     private const float ContentWidth = 440;
     private readonly Plugin _plugin;
     private long _depsCheckedAt = long.MinValue / 2;
-    private bool _lifestream, _vnav;
+    private bool _lifestream, _vnav, _giddyUp;
 
     public ConfigWindow(Plugin plugin)
         : base("Beeline###BeelineConfig", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse)
@@ -64,10 +64,17 @@ internal sealed unsafe class ConfigWindow : Window
             _depsCheckedAt = Environment.TickCount64;
             _lifestream = Plugin.IsPluginLoaded("Lifestream");
             _vnav       = Plugin.IsPluginLoaded("vnavmesh");
+            _giddyUp    = Plugin.IsPluginLoaded("GiddyUp");
         }
         Requirement("Lifestream", _lifestream, "needed for teleports and the aethernet");
         ImGui.SameLine(0, 18 * ImGuiHelpers.GlobalScale);
         Requirement("vnavmesh", _vnav, "needed to move you there");
+        if (_giddyUp)
+        {
+            StatusLine(ImGuiColors.HealerGreen, FontAwesomeIcon.Horse, "Giddy Up found");
+            Help("Giddy Up handles Sprint, Peloton and dismounting for enemies (per its own settings); Beeline still "
+               + "chooses when to mount on a trip. Beeline shares its learned speeds with it.");
+        }
 
         if (_plugin.Travel.IsActive)
         {
@@ -220,6 +227,8 @@ internal sealed unsafe class ConfigWindow : Window
               "Needs all the aether currents of the zone.");
         Check("Sprint or Peloton on foot", () => Config.SpeedBuffs, v => Config.SpeedBuffs = v,
               "Sprint when it's ready (you then keep Jog until you change map, mount up or fight), otherwise Peloton if your job has it.");
+        if (_giddyUp)
+            Hint("Giddy Up is installed: when its Sprint / Peloton options are on, it handles them during trips instead.");
         Hint("Other plugins' auto-mount, auto-dismount or cancel-mount-cast features can knock you off your mount when Beeline takes off. "
            + "Turn them off: Beeline mounts you itself.");
     }
@@ -333,6 +342,8 @@ internal sealed unsafe class ConfigWindow : Window
 
         Check("Dismount when you target an enemy", () => Config.DismountOnEnemy, v => Config.DismountOnEnemy = v,
               "Gets you off your mount as soon as you target something you can attack.");
+        if (_giddyUp)
+            Hint("Giddy Up is installed: when its enemy dismount is on, it handles this (it can wait until the enemy is in your attack range).");
     }
 
     // ---------------- Advanced ----------------
