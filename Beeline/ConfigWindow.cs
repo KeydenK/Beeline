@@ -349,14 +349,9 @@ internal sealed unsafe class ConfigWindow : Window
             + "once the enemy is within your attack range, as set in Giddy Up (or at once if Giddy Up dismounts as soon "
             + "as you target). Off (default): targeting doesn't stop the trip, but with Giddy Up it still stops when "
             + "Giddy Up gets you off the mount for that enemy.");
-        if (_giddyUp)
-        {
-            // Giddy Up owns dismounting: one place for that setting.
-            Hint("Dismounting for enemies: handled by Giddy Up (set it there).");
-        }
-        else
-            Check("Dismount when you target an enemy", () => Config.DismountOnEnemy, v => Config.DismountOnEnemy = v,
-                  "Gets you off your mount as soon as you target something you can attack.");
+        Hint(_giddyUp
+            ? "Dismounting for enemies: Giddy Up does it (its Dismounting tab)."
+            : "Dismounting for enemies (at your attack range, landing included): see Giddy Up, a companion plugin.");
     }
 
     // ---------------- Advanced ----------------

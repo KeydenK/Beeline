@@ -54,6 +54,7 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     /// <summary>No safe distance from mobs this many levels (or more) below you: they can't aggro you.</summary>
     public bool IgnoreLowLevelMobs { get; set; } = true;
     public int NoAggroLevelGap { get; set; } = 10;
+    /// <summary>Unused: dismounting for enemies moved to Giddy Up. Kept so older settings files load.</summary>
     public bool DismountOnEnemy { get; set; } = false;
     /// <summary>Targeting an enemy stops the trip (being attacked doesn't). On: you can start the fight.</summary>
     public bool StopOnEnemyTarget { get; set; } = false;
@@ -164,7 +165,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
     internal Places? Places => _places.IsCompletedSuccessfully ? _places.Result : null;
     internal Travel Travel { get; }
     private bool _placesErrorShown;
-    private readonly Dismounter _dismounter;
     /// <summary>Link with Giddy Up (null for the few ms before it's created).</summary>
     internal Companion? Companion { get; private set; }
 
@@ -222,7 +222,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
         Ipc     = new Ipc(PluginInterface);
         _places = System.Threading.Tasks.Task.Run(() => new Places(Data));
         Travel  = new Travel(this);
-        _dismounter = new Dismounter(this);
         Companion   = new Companion(this);
 
         _configWindow = new ConfigWindow(this);
@@ -251,7 +250,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
         Commands.RemoveHandler(Command);
         Companion?.Dispose();
         Travel.Dispose();
-        _dismounter.Dispose();
         PluginInterface.UiBuilder.Draw         -= _windows.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= _configWindow.Toggle;
         PluginInterface.UiBuilder.OpenMainUi   -= _configWindow.Toggle;

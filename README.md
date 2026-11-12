@@ -44,7 +44,6 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - Mouse: **Ctrl + left click** by default. Left, right or middle click or a side button, with any mix of Ctrl, Shift and Alt.
   - Keyboard: any key you choose (with any mix of Ctrl, Shift and Alt), pressed while the mouse is over the map.
 - **You stay in control.** A trip stops as soon as you move your character, and in a few other cases (see [When does a trip stop?](#when-does-a-trip-stop)).
-- **Optional: dismount when you target an enemy** (off by default).
 - **Lightweight.** It does nothing while the map is closed and no trip is running. See [Performance](#performance).
 - **Private.** Nothing is sent anywhere, and its log lines never contain your character's name or world.
 
@@ -111,7 +110,6 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 | Target the quest NPC or object when you arrive | Only friendly NPCs and objects, only within talking range. Enemies are never targeted | On |
 | Safe distance from quest enemies | Stop this far from enemies you have to fight | 20 yalms |
 | No safe distance from enemies far below your level | Walk right up to enemies this many levels below you (they can't aggro you) | On, 10 levels |
-| Dismount when you target an enemy | Gets you off your mount as soon as you target something you can attack | Off |
 
 **Advanced**
 
@@ -134,7 +132,7 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 - **You press the button again** on something else: the new trip replaces the old one.
 - **You type `/beeline stop`**, or click **Stop** in the settings window.
 - **You change zone** after arriving (a duty pops, you teleport yourself, you log out...).
-- **You target an enemy while mounted**, if "Dismount when you target an enemy" is on.
+- **You target an enemy**, if "Stop the trip when you target an enemy" is on (with Giddy Up: once it's within your attack range).
 - **Something goes wrong**, with a chat message: the teleport is refused (in combat, not enough gil...), there's no walkable ground near the spot, the teleport takes longer than 60 seconds, or vnavmesh isn't ready after 2 minutes.
 
 ## Safeguards
@@ -211,7 +209,6 @@ Beeline is built to cost nothing when you're not using it:
 - **Map closed and no trip running:** it does nothing at all.
 - **Map open:** one quick check per frame for your button or click.
 - **During a trip:** a check for your own movement every frame (so stopping is instant), and the trip steps 10 times a second, until you arrive.
-- **While mounted:** only reacts when your target changes (for the dismount option).
 - **At load:** the aetheryte list is built once, in the background.
 
 ## How it works (for the curious)
