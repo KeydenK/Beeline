@@ -17,7 +17,6 @@ internal sealed unsafe class Dismounter : IDisposable
     private readonly Plugin _p;
     private bool _watching;
     private nint _lastTarget;
-    private bool _giddyUpHandles; // Giddy Up dismounts you for enemies (asked once per mount): leave it to it
 
     public Dismounter(Plugin p)
     {
@@ -43,10 +42,9 @@ internal sealed unsafe class Dismounter : IDisposable
 
     private void StartWatching()
     {
-        if (_watching) return;
+        if (_watching || !_p.Config.DismountOnEnemy) return; // option off: nothing to watch on this mount
         _watching = true;
         _lastTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // an enemy already targeted doesn't count
-        _giddyUpHandles = _p.Companion?.GiddyUpEnemyDismount() == true;
         Plugin.Framework.Update += OnUpdate;
     }
 
@@ -67,8 +65,12 @@ internal sealed unsafe class Dismounter : IDisposable
         var target = Plugin.TargetManager.Target;
 
         // An enemy = a battle NPC you could auto-attack (action 7), as the game itself decides.
-        if (!_p.Config.DismountOnEnemy || _giddyUpHandles || target is not IBattleNpc npc
+        if (!_p.Config.DismountOnEnemy || target is not IBattleNpc npc
             || !ActionManager.CanUseActionOnTarget(7, (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)npc.Address))
+            return;
+        // Giddy Up handles enemy dismounts (asked now, so loading it or changing its settings mid-ride counts): it
+        // dismounts you at the right moment (once in your attack range, if set so); never both.
+        if (_p.Companion?.GiddyUpEnemyDismount() == true)
             return;
 
         Plugin.Info($"{Plugin.Tag} You targeted {npc.Name}: dismounting");

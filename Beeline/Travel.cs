@@ -229,7 +229,7 @@ internal sealed unsafe class Travel : IDisposable
     private nint _tripTarget; // target when last checked (raw pointer: nothing else to do until it changes)
     private FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* _tripEnemy; // targeted enemy, not yet in range
     private float _enemyStopRange;  // stop once it's this close (edge to edge); from Giddy Up's settings
-    private bool _giddyUpDismounts; // Giddy Up dismounts you for enemies (asked when the trip starts)
+    private bool _giddyUpDismounts; // Giddy Up dismounts you for enemies (asked when you target one)
 
     /// <summary>
     /// "Stop the trip when you target an enemy": with Giddy Up, once the enemy is within your attack range as Giddy Up
@@ -249,7 +249,8 @@ internal sealed unsafe class Travel : IDisposable
             if (t == null || t->ObjectKind != FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc
                 || t->IsDead() || !ActionManager.CanUseActionOnTarget(7, t))
                 return false;
-            _enemyStopRange = _p.Companion?.GiddyUpEnemyStopRange() ?? -1f;
+            _enemyStopRange = _p.Companion?.GiddyUpEnemyStopRange() ?? -1f; // asked now: current settings
+            _giddyUpDismounts = _p.Companion?.GiddyUpEnemyDismount() == true;
             if (_enemyStopRange < 0)
                 return true;
             _tripEnemy = t;
@@ -279,7 +280,6 @@ internal sealed unsafe class Travel : IDisposable
             _giddyUpBoosts = _p.Companion?.GiddyUpBoosts() == true;
             _tripTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // already targeted: doesn't count
             _tripEnemy = null;
-            _giddyUpDismounts = _p.Companion?.GiddyUpEnemyDismount() == true;
             _p.Companion?.TripStarted();
         }
         _phase = phase;
