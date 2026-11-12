@@ -342,9 +342,10 @@ internal sealed unsafe class ConfigWindow : Window
 
         Check("Stop the trip when you target an enemy", () => Config.StopOnEnemyTarget, v => Config.StopOnEnemyTarget = v,
               "Being attacked doesn't stop a trip (you keep going, like the game keeps you on your mount). With this "
-            + "on, targeting something you can attack stops it, so you can start the fight. With Giddy Up installed, the trip goes on until the enemy "
-            + "is within your attack range, as set in Giddy Up (or stops at once if Giddy Up is set to dismount as soon "
-            + "as you target). Turn it off if stray tab-targets keep stopping your trips.");
+            + "on, targeting something you can attack stops it, so you can start the fight; with Giddy Up installed, "
+            + "once the enemy is within your attack range, as set in Giddy Up (or at once if Giddy Up dismounts as soon "
+            + "as you target). Off (default): targeting doesn't stop the trip, but with Giddy Up it still stops when "
+            + "Giddy Up gets you off the mount for that enemy.");
         if (_giddyUp)
         {
             // Giddy Up owns dismounting: one place for that setting.

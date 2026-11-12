@@ -742,16 +742,30 @@ internal sealed unsafe class Travel : IDisposable
         // Continue from where you are on the route; never shortcut it.
         var next = Math.Max(0, PositionOnRoute(points, player.Position));
         var pos = player.Position;
-        var mountedOnGround = _pathFly && Mounted() && !Plugin.Condition[ConditionFlag.InFlight];
-        // Already on the mount, standing on the route's first point: going to it would turn you back. Start at the next.
-        if (mountedOnGround && next == 0 && points.Count > 1 && Vector2.Distance(Flat(points[0]), Flat(pos)) < 5f)
-            next = 1;
+        // On the mount for a flying route: its first points were planned from the ground right around you. Going to them
+        // once you're taking off (at once with a single jump) means dipping back down or turning back: start at the first
+        // point that's actually away from you.
+        if (_pathFly && Mounted())
+            while (next < points.Count - 1 && Vector2.Distance(Flat(points[next]), Flat(pos)) < 6f)
+                next++;
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
         // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
-        // End it where it first gets within the stop distance instead. Not when flying up to an NPC (it would stop in
-        // the air); mobs are kept at a distance either way.
-        if (_destRange > 0 && (!_pathFly || _destRange > 8f))
+        // End it where it first gets within the stop distance instead. Flying to an NPC or object, that end point is put
+        // on the ground (else you'd stop in the air, or fly on into its face): you land at talking distance.
+        if (_destRange > 0)
+        {
             route = EndWithin(route, _dest, _destRange);
+            if (_pathFly && _destRange <= 8f && route.Count > 0)
+            {
+                var end = route[^1];
+                try
+                {
+                    if (_p.Ipc.NavGroundAt(end.X, end.Z, 5f, end.Y + 5f) is { } ground)
+                        route[^1] = ground;
+                }
+                catch { /* vnavmesh gone: keep the point as it is */ }
+            }
+        }
         Plugin.Info($"{Plugin.Tag} Following the path ({points.Count} points, starting at point {next}), {_pathClock.Elapsed.TotalSeconds:0.0} s after asking");
         _p.Ipc.NavFollow(route, _pathFly);
         _bridging = false;

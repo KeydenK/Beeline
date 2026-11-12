@@ -18,7 +18,7 @@ namespace Beeline;
 public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
 {
     /// <summary>2: new defaults (Square/X closed the map, middle click is auto-run). 3: no master switch any more.</summary>
-    public int Version { get; set; } = 4;
+    public int Version { get; set; } = 5;
 
     /// <summary>Old master switch (until version 2). Each input now has its own None / Off instead.</summary>
     public bool Enabled { get; set; } = true;
@@ -56,7 +56,7 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public int NoAggroLevelGap { get; set; } = 10;
     public bool DismountOnEnemy { get; set; } = false;
     /// <summary>Targeting an enemy stops the trip (being attacked doesn't). On: you can start the fight.</summary>
-    public bool StopOnEnemyTarget { get; set; } = true;
+    public bool StopOnEnemyTarget { get; set; } = false;
     // Route timing, learned from your own trips (seconds, and yalms per second). The values below are only
     // the starting point; each trip refines them. "Samples" = how many trips were measured.
     public float TeleportSeconds { get; set; } = 12f;
@@ -206,6 +206,14 @@ public sealed unsafe class Plugin : IDalamudPlugin
             // Same-map teleports are opt-out (a test build briefly had them off by default).
             Config.SameMapTeleport = true;
             Config.Version = 4;
+            PluginInterface.SavePluginConfig(Config);
+        }
+        if (Config.Version < 5)
+        {
+            // "Stop the trip when you target an enemy" is now off by default (a test build had it on): with Giddy Up,
+            // the trip stops anyway when it's time to dismount for the enemy.
+            Config.StopOnEnemyTarget = false;
+            Config.Version = 5;
             PluginInterface.SavePluginConfig(Config);
         }
         Ipc     = new Ipc(PluginInterface);
