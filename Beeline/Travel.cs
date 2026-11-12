@@ -872,14 +872,9 @@ internal sealed unsafe class Travel : IDisposable
         }
         if (_phase != Phase.Arriving && player == null)
             return; // loading screen
-        // A fight ends the trip. Targeting an enemy too, if that option is on (default: rotation plugins only start
-        // the fight once the trip stops; off, a stray tab-target doesn't stop you).
-        if (c[ConditionFlag.InCombat])
-        {
-            Plugin.Info($"{Plugin.Tag} You entered combat: trip stopped");
-            Cancel("stopped (combat)", quiet: true);
-            return;
-        }
+        // Being attacked doesn't stop the trip (in the game, taking hits doesn't knock you off your mount either):
+        // you carry on unless you target an enemy (if that option is on: rotation plugins only start the fight once
+        // the trip stops) or something dismounts you for a fight.
         if (Config.StopOnEnemyTarget && EnemyStopsTrip())
         {
             Plugin.Info($"{Plugin.Tag} Enemy targeted{(_tripEnemy != null ? " and in range" : "")}: trip stopped");
