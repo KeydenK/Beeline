@@ -79,6 +79,7 @@ internal sealed unsafe class Travel : IDisposable
         if (_phase != Phase.None)
             try { _p.Ipc.NavStop(); } catch { /* vnavmesh missing */ }
         Stop();
+        RemoveTimer();
     }
 
     /// <param name="world">The spot under the mouse, worked out from the map's view (precise, works on an unfocused map);
@@ -135,6 +136,7 @@ internal sealed unsafe class Travel : IDisposable
 
         Plugin.Info($"{Plugin.Tag} Travel to ({mapCoords.X:0.0}, {mapCoords.Y:0.0}) \"{Plugin.Redact(tooltip)}\" in territory {territory}: {route.Value.Describe}");
         var r = route.Value;
+        _tripEstimate = r.Cost;
         _territory  = r.ThenShard != 0 ? r.FirstTerritory : territory;
         _finalTerritory = territory;
         _pendingShard   = r.ThenShard;
@@ -198,6 +200,7 @@ internal sealed unsafe class Travel : IDisposable
         _dataId         = 0;
         _radius         = 0;
         _navStarted     = false;
+        _tripEstimate   = Config.TeleportSeconds + Config.AethernetSeconds;
         _hop            = Hop.Teleport;
         _hopTime.Restart();
         _tripTime.Restart();
@@ -220,6 +223,7 @@ internal sealed unsafe class Travel : IDisposable
 
     private void Stop()
     {
+        HideTimer();
         var wasActive = _phase != Phase.None;
         if (wasActive)
             Plugin.Framework.Update -= OnUpdate;
@@ -237,6 +241,67 @@ internal sealed unsafe class Travel : IDisposable
     }
 
     private bool _timingsChanged;
+
+    // ---------------- Time left, in the server info bar (option) ----------------
+
+    private float _tripEstimate;                         // the chosen route's estimate when the trip started (s)
+    private Dalamud.Game.Gui.Dtr.IDtrBarEntry? _timerEntry;
+    private long _timerAt;
+
+    /// <summary>
+    /// Once a second, with the option on: teleporting or waiting, the route's estimate minus the time spent; moving,
+    /// recomputed from the distance left at your learned speeds (flying, riding, or on foot with a mount on its way).
+    /// </summary>
+    private void UpdateTimer(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter? player)
+    {
+        if (!Config.ShowTripTimer)
+        {
+            HideTimer();
+            return;
+        }
+        var now = Environment.TickCount64;
+        if (now - _timerAt < 1000)
+            return;
+        _timerAt = now;
+        var left = _tripEstimate - (float)_tripTime.Elapsed.TotalSeconds;
+        if (_phase == Phase.Moving && player != null)
+        {
+            var flat = Math.Max(0f, Vector2.Distance(Flat(player.Position), Flat(_dest)) - _destRange);
+            var c = Plugin.Condition;
+            if (c[ConditionFlag.InFlight])
+                left = Math.Max(0f, Vector3.Distance(player.Position, _dest) - _destRange) / Math.Max(1f, Config.FlySpeed);
+            else if (Mounted())
+                left = MountedSeconds(flat, _territory, summon: false);
+            else
+                left = _wantMount ? MountedSeconds(flat, _territory, summon: true) : FootSeconds(flat * Math.Max(1f, Config.Detour), sameZone: true);
+        }
+        var s = (int)MathF.Ceiling(Math.Max(0f, left));
+        try
+        {
+            _timerEntry ??= Plugin.DtrBar.Get("Beeline");
+            _timerEntry.Text = $"Beeline {s / 60}:{s % 60:00}";
+            _timerEntry.Tooltip = "Time left for the Beeline trip (estimate from your learned speeds)";
+            _timerEntry.Shown = true;
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.Debug(e, "Trip timer unavailable");
+        }
+    }
+
+    private void HideTimer()
+    {
+        if (_timerEntry != null)
+            _timerEntry.Shown = false;
+        _timerAt = 0;
+    }
+
+    /// <summary>Removes the info bar entry (plugin unload).</summary>
+    internal void RemoveTimer()
+    {
+        _timerEntry?.Remove();
+        _timerEntry = null;
+    }
 
     private nint _tripTarget; // target when last checked (raw pointer: nothing else to do until it changes)
     private FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* _tripEnemy; // targeted enemy, not yet in range
@@ -924,6 +989,7 @@ internal sealed unsafe class Travel : IDisposable
         if (_tickTime.ElapsedMilliseconds < StepIntervalMs)
             return;
         _tickTime.Restart();
+        UpdateTimer(player);
 
         // After arriving: a zone change (duty, manual teleport, logout) ends the trip.
         if (_phase != Phase.Arriving && !c[ConditionFlag.BetweenAreas] && !c[ConditionFlag.BetweenAreas51]

@@ -57,6 +57,8 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public bool DismountOnEnemy { get; set; } = false;
     /// <summary>Targeting an enemy stops the trip (being attacked doesn't). On: you can start the fight.</summary>
     public bool StopOnEnemyTarget { get; set; } = false;
+    /// <summary>Show the time left for the current trip in the server info bar (top right).</summary>
+    public bool ShowTripTimer { get; set; } = false;
     // Route timing, learned from your own trips (seconds, and yalms per second). The values below are only
     // the starting point; each trip refines them. "Samples" = how many trips were measured.
     public float TeleportSeconds { get; set; } = 12f;
@@ -123,6 +125,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager          TargetManager   { get; private set; } = null!;
     [PluginService] internal static IFateTable              Fates           { get; private set; } = null!;
     [PluginService] internal static IPartyList              Party           { get; private set; } = null!;
+    [PluginService] internal static IDtrBar                 DtrBar          { get; private set; } = null!;
 
     internal Configuration Config { get; }
     private static Configuration? _cfg;

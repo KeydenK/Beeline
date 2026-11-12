@@ -225,6 +225,9 @@ internal sealed unsafe class ConfigWindow : Window
             DrawMountPicker();
         Check("Fly when the zone allows it", () => Config.AllowFlying, v => Config.AllowFlying = v,
               "Needs all the aether currents of the zone.");
+        Check("Show the time left in the server info bar", () => Config.ShowTripTimer, v => Config.ShowTripTimer = v,
+              "During a trip, \"Beeline 0:24\" at the top right of the screen: the time left, from your learned speeds. "
+            + "Updates once a second.");
         Check("Sprint or Peloton on foot", () => Config.SpeedBuffs, v => Config.SpeedBuffs = v,
               "Sprint when it's ready (you then keep Jog until you change map, mount up or fight), otherwise Peloton if your job has it.");
         if (_giddyUp)
