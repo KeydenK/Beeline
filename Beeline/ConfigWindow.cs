@@ -75,6 +75,12 @@ internal sealed unsafe class ConfigWindow : Window
             Help("Giddy Up handles Sprint, Peloton and dismounting for enemies (per its own settings); Beeline still "
                + "chooses when to mount on a trip. Beeline shares its learned speeds with it.");
         }
+        else
+            Companion("Giddy Up", "https://raw.githubusercontent.com/KeydenK/GiddyUp/main/repo.json",
+                      "Mounting and dismounting done for you: it mounts you up after a fight, gathering or a zone "
+                    + "change, gets you off the mount when the enemy you target is within your attack range (landing "
+                    + "included), and uses Sprint and Peloton when they help. Together, Beeline trips stop by "
+                    + "themselves to let you fight.");
 
         if (_plugin.Travel.IsActive)
         {
@@ -351,7 +357,8 @@ internal sealed unsafe class ConfigWindow : Window
             + "Giddy Up gets you off the mount for that enemy.");
         Hint(_giddyUp
             ? "Dismounting for enemies: Giddy Up does it (its Dismounting tab)."
-            : "Dismounting for enemies (at your attack range, landing included): see Giddy Up, a companion plugin.");
+            : "Dismounting for enemies (at your attack range, landing included): that's Giddy Up, a companion "
+            + "plugin. How to get it: at the top of this window.");
     }
 
     // ---------------- Advanced ----------------
@@ -472,6 +479,28 @@ internal sealed unsafe class ConfigWindow : Window
         ImGui.SameLine();
         using (ImRaii.PushColor(ImGuiCol.Text, color))
             ImGui.TextUnformatted(text);
+    }
+
+    /// <summary>
+    /// The companion plugin isn't installed: say what it adds, and how to get it (its repository link, with a Copy
+    /// button, in Dalamud's custom repositories, then install it).
+    /// </summary>
+    private static void Companion(string name, string repoUrl, string whatItAdds)
+    {
+        StatusLine(ImGuiColors.DalamudViolet, FontAwesomeIcon.PuzzlePiece, $"Works great with {name} (not installed)");
+        Help(whatItAdds);
+        using var node = ImRaii.TreeNode($"How to get {name}##get{name}");
+        if (!node)
+            return;
+        ImGui.TextUnformatted("1. Type /xlsettings and open the Experimental tab.");
+        ImGui.TextUnformatted("2. Under Custom Plugin Repositories, paste this link, click +, then Save and Close:");
+        var url = repoUrl;
+        ImGui.SetNextItemWidth(330 * ImGuiHelpers.GlobalScale);
+        ImGui.InputText($"##url{name}", ref url, 256, ImGuiInputTextFlags.ReadOnly);
+        ImGui.SameLine();
+        if (ImGui.SmallButton($"Copy##copy{name}"))
+            ImGui.SetClipboardText(repoUrl);
+        ImGui.TextUnformatted($"3. Type /xlplugins, search for {name} and install it.");
     }
 
     private static void Header(string text)

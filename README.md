@@ -56,6 +56,16 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
 Both are free plugins you can find in the plugin installer. The settings window shows whether they're found.
 Without Lifestream, Beeline still works inside your current zone (it just can't teleport).
 
+## Works great with Giddy Up
+
+[Giddy Up](https://github.com/KeydenK/GiddyUp) is a companion plugin by the same author: it mounts you up after a fight, gathering or a zone change, gets you off the mount when the enemy you target is within your attack range (landing included), and uses Sprint and Peloton when they help. With both installed, Beeline decides when to mount on its trips, Giddy Up handles the rest, and a trip stops by itself when Giddy Up gets you off for a fight. Each works fine alone.
+
+To get it, add its repository the same way as Beeline's below, with this link:
+```
+https://raw.githubusercontent.com/KeydenK/GiddyUp/main/repo.json
+```
+then install **Giddy Up** from `/xlplugins`. Beeline's settings show "Giddy Up found" once it's there.
+
 ## Installation
 
 1. In game, type `/xlsettings` and open the **Experimental** tab.
