@@ -9,7 +9,9 @@ namespace Beeline;
 /// Something on the map with an exact position: area radius (0 for a single spot), the NPC/object it points at (0 if
 /// none), and whether <see cref="Position"/>.Y is a real height (false: only X/Z are known).
 /// </summary>
-internal readonly record struct MarkerHit(Vector3 Position, float Radius, uint DataId, string Label, bool HasHeight = true);
+/// <param name="AreaCenter">For a quest icon: the quest's own area (circle) around it, if the quest has one.</param>
+internal readonly record struct MarkerHit(Vector3 Position, float Radius, uint DataId, string Label, bool HasHeight = true,
+                                          Vector2? AreaCenter = null, float AreaRadius = 0);
 
 /// <summary>
 /// Finds what's under the map cursor, from everything the game knows the exact position of: quest, leve, guildleve,
@@ -36,7 +38,8 @@ internal static unsafe class QuestMarkers
         var list = "";
 
         // One candidate: picked if the tooltip names it, or the cursor is on its icon / inside its area.
-        void Add(Vector3 pos, float radius, uint dataId, string label, string name, bool hasHeight, uint inTerritory, bool exactName = false)
+        void Add(Vector3 pos, float radius, uint dataId, string label, string name, bool hasHeight, uint inTerritory, bool exactName = false,
+                 Vector2? areaCenter = null, float areaRadius = 0)
         {
             var dist = Vector2.Distance(new Vector2(pos.X, pos.Z), cursor);
             if (diagnose && inTerritory == territory)
@@ -66,7 +69,7 @@ internal static unsafe class QuestMarkers
             if (score < bestScore)
             {
                 bestScore = score;
-                best = new MarkerHit(pos, radius, dataId, string.IsNullOrEmpty(name) ? label : name, hasHeight);
+                best = new MarkerHit(pos, radius, dataId, string.IsNullOrEmpty(name) ? label : name, hasHeight, areaCenter, areaRadius);
             }
         }
 
@@ -79,10 +82,29 @@ internal static unsafe class QuestMarkers
                 if (info == null)
                     return;
                 var label = info->Label.ToString();
-                foreach (var d in info->MarkerData.AsSpan())
+                var data = info->MarkerData.AsSpan();
+                foreach (var d in data)
                 {
                     var name = d.TooltipString != null ? d.TooltipString->ToString() : "";
-                    Add(d.Position, d.Radius, d.DataId, label, name, true, d.TerritoryTypeId);
+                    // A quest icon: the same quest's area (circle) that contains it, if any, so searches stay in the zone.
+                    Vector2? areaCenter = null;
+                    var areaRadius = 0f;
+                    if (d.Radius <= MinIconWithin)
+                    {
+                        var iconPos = new Vector2(d.Position.X, d.Position.Z);
+                        foreach (var a in data)
+                        {
+                            if (a.Radius <= MinIconWithin || a.TerritoryTypeId != d.TerritoryTypeId)
+                                continue;
+                            var c = new Vector2(a.Position.X, a.Position.Z);
+                            if (Vector2.Distance(c, iconPos) <= a.Radius && (areaCenter == null || a.Radius < areaRadius))
+                            {
+                                areaCenter = c;
+                                areaRadius = a.Radius;
+                            }
+                        }
+                    }
+                    Add(d.Position, d.Radius, d.DataId, label, name, true, d.TerritoryTypeId, areaCenter: areaCenter, areaRadius: areaRadius);
                 }
             }
 

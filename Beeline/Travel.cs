@@ -38,6 +38,8 @@ internal sealed unsafe class Travel : IDisposable
     private uint _dataId;          // NPC/object/mob the marker points at (0 = none)
     private float _radius;         // quest area radius (0 = a single spot)
     private bool _approached;      // already walked up to that NPC/object
+    private Vector2 _areaCenter;   // the quest's area (circle), when known: searches stay inside it
+    private float _areaRadius;
     private uint _finalTerritory;  // zone of the destination (_territory is the zone of the current step)
     private uint _pendingShard;    // aethernet hop still to take after the teleport (0 = none)
     private Vector2? _shardArrival;
@@ -94,7 +96,9 @@ internal sealed unsafe class Travel : IDisposable
         var marker = QuestMarkers.Find(territory, mapId, target, tooltip, iconWithin, cursorReliable: world != null);
         if (marker is { } mk)
         {
-            Plugin.Info($"{Plugin.Tag} Marker \"{Plugin.Redact(mk.Label)}\" at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId}), {Vector2.Distance(target, new Vector2(mk.Position.X, mk.Position.Z)):0.0} y from the cursor");
+            Plugin.Info($"{Plugin.Tag} Marker \"{Plugin.Redact(mk.Label)}\" at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId}"
+                        + (mk.AreaCenter is { } ac ? $", in its quest area at ({ac.X:0}, {ac.Y:0}) radius {mk.AreaRadius:0}" : "")
+                        + $"), {Vector2.Distance(target, new Vector2(mk.Position.X, mk.Position.Z)):0.0} y from the cursor");
             target = new Vector2(mk.Position.X, mk.Position.Z);
         }
         else if (cursorStale)
@@ -141,6 +145,13 @@ internal sealed unsafe class Travel : IDisposable
         _targetY    = marker is { HasHeight: true } withHeight ? withHeight.Position.Y : null;
         _dataId     = marker?.DataId ?? 0;
         _radius     = marker?.Radius ?? 0;
+        // The quest's area (circle): the marker itself if it is one, else the area its icon belongs to (if any).
+        (_areaCenter, _areaRadius) = marker switch
+        {
+            { Radius: > OnMarkerWithin + 1 } m => (new Vector2(m.Position.X, m.Position.Z), m.Radius),
+            { AreaCenter: { } c } m => (c, m.AreaRadius),
+            _ => (Vector2.Zero, 0f),
+        };
         _approached = false;
 
         try
@@ -1303,15 +1314,17 @@ internal sealed unsafe class Travel : IDisposable
     /// </summary>
     private unsafe Dalamud.Game.ClientState.Objects.Types.IGameObject? QuestObjectInArea()
     {
-        // An area: anything usable in it (marked ones first). An icon (a quest marker without an area): only objects
-        // showing the game's quest marker, within the distance the game loads objects around you.
-        var area = _radius > OnMarkerWithin + 1;
+        // The quest's area (the circle, also when you clicked its icon): anything usable inside it, marked ones first.
+        // An icon without an area: only objects showing the game's quest marker, within the distance the game loads
+        // objects around you.
+        var area = _areaRadius > 0;
         if (!area && _targetY == null)
             return null; // a plain spot on the map, not a quest marker
-        var searchRadius = area ? _radius + 10f : QuestIconSearch;
+        var center = area ? _areaCenter : _target;
+        var searchRadius = area ? _areaRadius : QuestIconSearch;
         var player = Plugin.ObjectTable.LocalPlayer;
-        var inArea = player != null && Vector2.Distance(Flat(player.Position), _target) <= searchRadius;
-        var from = inArea ? Flat(player!.Position) : _target;
+        var inArea = player != null && Vector2.Distance(Flat(player.Position), center) <= searchRadius;
+        var from = inArea ? Flat(player!.Position) : center;
         Dalamud.Game.ClientState.Objects.Types.IGameObject? best = null;
         var bestScore = float.MaxValue;
         foreach (var o in Plugin.ObjectTable)
@@ -1319,8 +1332,8 @@ internal sealed unsafe class Travel : IDisposable
             if (!o.IsTargetable || o.ObjectKind is not (Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj
                                                      or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc))
                 continue;
-            if (Vector2.Distance(Flat(o.Position), _target) > searchRadius)
-                continue;
+            if (Vector2.Distance(Flat(o.Position), center) > searchRadius + o.HitboxRadius)
+                continue; // outside the quest's area
             var marked = ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)o.Address)->NamePlateIconId != 0;
             if (!area && !marked)
                 continue;
