@@ -63,6 +63,13 @@ internal sealed class Companion : IDisposable
     /// <summary>Giddy Up is loaded and dismounts you for enemies itself (asked once per mount).</summary>
     internal bool GiddyUpEnemyDismount() => Ask(_guEnemy);
 
+    /// <summary>Giddy Up is installed and loaded (whatever its settings): it owns dismounting, Beeline stays out.</summary>
+    internal bool GiddyUpPresent()
+    {
+        try { _guEnemy.InvokeFunc(); return true; }
+        catch { return false; }
+    }
+
     /// <summary>
     /// How close a targeted enemy must be before a trip stops: your attack range per Giddy Up's settings, or -1 =
     /// at once (Giddy Up set to "as soon as you target it", or not installed). Asked once per targeted enemy.

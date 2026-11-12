@@ -55,7 +55,7 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public bool IgnoreLowLevelMobs { get; set; } = true;
     public int NoAggroLevelGap { get; set; } = 10;
     public bool DismountOnEnemy { get; set; } = false;
-    /// <summary>Targeting an enemy stops the trip (being attacked doesn't). On: rotation plugins can start the fight.</summary>
+    /// <summary>Targeting an enemy stops the trip (being attacked doesn't). On: you can start the fight.</summary>
     public bool StopOnEnemyTarget { get; set; } = true;
     // Route timing, learned from your own trips (seconds, and yalms per second). The values below are only
     // the starting point; each trip refines them. "Samples" = how many trips were measured.
@@ -149,6 +149,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
     /// <summary>Trip details: visible in the normal log only when "Write each button press to the log" is on.</summary>
     internal static void Info(string message)
     {
+        // Dalamud already prefixes every line with the plugin's name: drop our own tag (it showed twice).
+        if (message.StartsWith(Tag + " ", StringComparison.Ordinal))
+            message = message[(Tag.Length + 1)..];
         if (Config_LogPresses) Log.Information(message);
         else Log.Debug(message);
     }
@@ -407,10 +410,12 @@ public sealed unsafe class Plugin : IDalamudPlugin
             return;
         }
 
+        // Controller: only when the map itself has the focus and shows its crosshair. Otherwise the button is meant for
+        // the game (the same button targets things), and the map's cursor readout would be stale anyway.
         var focused = RaptureAtkUnitManager.Instance()->AtkUnitManager.FocusedAddon;
-        if (padPressed && focused != null && focused != &map->AtkUnitBase)
+        if (padPressed && (focused != &map->AtkUnitBase || CrosshairPoint(map) == null))
         {
-            Info($"{Tag} Button ignored: \"{focused->NameString}\" has the focus, not the map");
+            Info($"{Tag} Button ignored: the map isn't focused ({(focused == null ? "the game has it" : $"\"{focused->NameString}\" has it")})");
             return;
         }
 

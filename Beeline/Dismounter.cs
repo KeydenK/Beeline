@@ -68,9 +68,9 @@ internal sealed unsafe class Dismounter : IDisposable
         if (!_p.Config.DismountOnEnemy || target is not IBattleNpc npc
             || !ActionManager.CanUseActionOnTarget(7, (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)npc.Address))
             return;
-        // Giddy Up handles enemy dismounts (asked now, so loading it or changing its settings mid-ride counts): it
-        // dismounts you at the right moment (once in your attack range, if set so); never both.
-        if (_p.Companion?.GiddyUpEnemyDismount() == true)
+        // Giddy Up installed: dismounting is its job, per its own settings (even when you turned it off there); never
+        // both. Asked now, so loading it mid-ride counts.
+        if (_p.Companion?.GiddyUpPresent() == true)
             return;
 
         Plugin.Info($"{Plugin.Tag} You targeted {npc.Name}: dismounting");

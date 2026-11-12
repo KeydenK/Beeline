@@ -199,6 +199,7 @@ internal sealed unsafe class Travel : IDisposable
     {
         if (_phase == Phase.None) return;
         if (!quiet) Plugin.Chat.Print($"Beeline: trip {why}.");
+        Plugin.Info($"Trip {why}"); // every end of a trip is in the log, with its reason
         var wasTeleporting = _phase == Phase.Arriving && _arrival != null;
         Stop();
         try { _p.Ipc.NavStop(); } catch { /* vnavmesh missing */ }
@@ -507,6 +508,8 @@ internal sealed unsafe class Travel : IDisposable
         _lastSample = player.Position;
         _sampleClock.Restart();
         _sawFlying = fly;
+        _tookOff = Plugin.Condition[ConditionFlag.InFlight];
+        _jumpPresses = 0;
         _sawMounted = Plugin.Condition[ConditionFlag.Mounted];
     }
 
@@ -593,7 +596,7 @@ internal sealed unsafe class Travel : IDisposable
     private bool _sawSprint, _sawPeloton; // boosts seen during this move (for learning the right speed)
     private readonly System.Diagnostics.Stopwatch _sprintClock = new(); // since Sprint was used
 
-    private const uint PelotonAction = 7557, SprintGeneralAction = 4;
+    private const uint PelotonAction = 7557, SprintGeneralAction = 4, JumpGeneralAction = 2;
     private const uint SprintStatus = 50, PelotonStatus = 1199;
 
     // ---------------- Moving: compute the path in the background, move meanwhile ----------------
@@ -727,7 +730,21 @@ internal sealed unsafe class Travel : IDisposable
     {
         // Continue from where you are on the route; never shortcut it.
         var next = Math.Max(0, PositionOnRoute(points, player.Position));
+        var pos = player.Position;
+        var mountedOnGround = _pathFly && Mounted() && !Plugin.Condition[ConditionFlag.InFlight];
+        // Already on the mount, standing on the route's first point: going to it would turn you back. Start at the next.
+        if (mountedOnGround && next == 0 && points.Count > 1 && Vector2.Distance(Flat(points[0]), Flat(pos)) < 5f)
+            next = 1;
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
+        // Mounted on the ground at the start of a flying route: first a point right above, a little ahead, so the
+        // take-off starts at once instead of riding along the ground to the first higher point.
+        if (mountedOnGround && route.Count > 0)
+        {
+            var ahead = Flat(route[0]) - Flat(pos);
+            var dir = ahead.Length() > 0.1f ? Vector2.Normalize(ahead) : Vector2.Zero;
+            route = new List<Vector3>(route.Count + 1) { new(pos.X + dir.X * 3, pos.Y + 8, pos.Z + dir.Y * 3) };
+            route.AddRange(next == 0 ? points : points.GetRange(next, points.Count - next));
+        }
         // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
         // End it where it first gets within the stop distance instead. Not when flying up to an NPC (it would stop in
         // the air); mobs are kept at a distance either way.
@@ -737,6 +754,35 @@ internal sealed unsafe class Travel : IDisposable
         _p.Ipc.NavFollow(route, _pathFly);
         _bridging = false;
         _heldPath = null;
+    }
+
+    private bool _tookOff;      // this move has been in the air (no more take-off presses after that)
+    private long _jumpAt;       // last Jump press by Beeline
+    private int _jumpPresses;
+
+    /// <summary>
+    /// Mounted on a flying leg, not in the air yet: press Jump. If you're airborne but not flying 0.2 s later (the game
+    /// set to take off on a double jump), press again. At most 6 presses per move; stops as soon as you fly.
+    /// </summary>
+    private void TakeOff(Dalamud.Plugin.Services.ICondition c)
+    {
+        if (c[ConditionFlag.InFlight])
+        {
+            _tookOff = true;
+            return;
+        }
+        if (_tookOff || _jumpPresses >= 6)
+            return;
+        var now = Environment.TickCount64;
+        var hopping = c[ConditionFlag.Jumping61];
+        if (now - _jumpAt < (hopping ? 200 : 400))
+            return;
+        if (ActionManager.Instance()->UseAction(ActionType.GeneralAction, JumpGeneralAction))
+        {
+            _jumpAt = now;
+            _jumpPresses++;
+            Plugin.Info($"Jump to take off ({(hopping ? "second press" : "first press")})");
+        }
     }
 
     /// <summary>The route cut where it first comes within <paramref name="range"/> of <paramref name="dest"/>.</summary>
@@ -873,8 +919,8 @@ internal sealed unsafe class Travel : IDisposable
         if (_phase != Phase.Arriving && player == null)
             return; // loading screen
         // Being attacked doesn't stop the trip (in the game, taking hits doesn't knock you off your mount either):
-        // you carry on unless you target an enemy (if that option is on: rotation plugins only start the fight once
-        // the trip stops) or something dismounts you for a fight.
+        // you carry on unless you target an enemy (if that option is on: so you can start the fight once the trip stops)
+        // or something dismounts you for a fight.
         if (Config.StopOnEnemyTarget && EnemyStopsTrip())
         {
             Plugin.Info($"{Plugin.Tag} Enemy targeted{(_tripEnemy != null ? " and in range" : "")}: trip stopped");
@@ -1136,6 +1182,17 @@ internal sealed unsafe class Travel : IDisposable
                     try { FollowPath(_heldPath, player); } catch { _heldPath = null; }
                     _phaseTime.Restart();
                 }
+                else if (_heldPath != null && player != null && _bridging && !_bridgeFlying
+                         && Vector3.Distance(player.Position, _bridgeEnd) < 3f)
+                {
+                    // Flying path ready, mount still coming: keep walking toward the target meanwhile (no stop).
+                    try { Bridge(player); } catch { /* vnavmesh gone */ }
+                }
+
+                // Take off on a flying leg: Beeline presses Jump itself, so it works whether the game's setting takes off
+                // on the first jump or on a double jump (a hop that didn't take off gets a second press).
+                if (_pathFly && player != null && Mounted() && MountSettled() && _navStarted)
+                    TakeOff(c);
 
                 // Keep watching for your own movement until vnavmesh arrives (or gives up).
                 bool moving;
@@ -1226,6 +1283,37 @@ internal sealed unsafe class Travel : IDisposable
         return best;
     }
 
+    /// <summary>
+    /// In an area marker with no NPC/object id (quests where you look for something in a zone): a quest object or NPC
+    /// in the area, preferring ones with a marker above them (the game's quest icon); the nearest to you once you're
+    /// inside the area, else the nearest to its centre.
+    /// </summary>
+    private unsafe Dalamud.Game.ClientState.Objects.Types.IGameObject? QuestObjectInArea()
+    {
+        if (_radius <= OnMarkerWithin + 1)
+            return null;
+        var player = Plugin.ObjectTable.LocalPlayer;
+        var inArea = player != null && Vector2.Distance(Flat(player.Position), _target) <= _radius + 10f;
+        var from = inArea ? Flat(player!.Position) : _target;
+        Dalamud.Game.ClientState.Objects.Types.IGameObject? best = null;
+        var bestScore = float.MaxValue;
+        foreach (var o in Plugin.ObjectTable)
+        {
+            if (!o.IsTargetable || o.ObjectKind is not (Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj
+                                                     or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc))
+                continue;
+            if (Vector2.Distance(Flat(o.Position), _target) > _radius + 10f)
+                continue;
+            var marked = ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)o.Address)->NamePlateIconId != 0;
+            // A marked object always beats an unmarked one; then the nearest.
+            var score = Vector2.Distance(Flat(o.Position), from) + (marked ? 0f : 100_000f);
+            if (score < bestScore) { bestScore = score; best = o; }
+        }
+        if (best != null)
+            Plugin.Info($"Quest area: found {Plugin.Redact(best.Name.TextValue)} ({(bestScore < 100_000f ? "marked" : "no marker")})");
+        return best;
+    }
+
     /// <summary>Within the game's talk/use distance (NPCs ~6 yalms, objects ~4.5, plus their size).</summary>
     private static bool InInteractRange(Dalamud.Game.ClientState.Objects.Types.IGameObject player, Dalamud.Game.ClientState.Objects.Types.IGameObject o)
     {
@@ -1277,7 +1365,7 @@ internal sealed unsafe class Travel : IDisposable
     private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindMarkerObject()
     {
         if (_dataId == 0)
-            return ObjectOnMarker() ?? GatheringInArea();
+            return ObjectOnMarker() ?? QuestObjectInArea() ?? GatheringInArea();
         var player = Plugin.ObjectTable.LocalPlayer;
         var searchRadius = MathF.Max(60f, _radius + 20f);
         var inArea = player != null && _radius > 0 && Vector2.Distance(Flat(player.Position), _target) <= _radius + 10f;
