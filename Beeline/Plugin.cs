@@ -55,6 +55,8 @@ public sealed class Configuration : Dalamud.Configuration.IPluginConfiguration
     public bool IgnoreLowLevelMobs { get; set; } = true;
     public int NoAggroLevelGap { get; set; } = 10;
     public bool DismountOnEnemy { get; set; } = false;
+    /// <summary>Targeting an enemy stops the trip (entering combat always does). On: rotation plugins can start the fight.</summary>
+    public bool StopOnEnemyTarget { get; set; } = true;
     // Route timing, learned from your own trips (seconds, and yalms per second). The values below are only
     // the starting point; each trip refines them. "Samples" = how many trips were measured.
     public float TeleportSeconds { get; set; } = 12f;

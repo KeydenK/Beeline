@@ -226,11 +226,26 @@ internal sealed unsafe class Travel : IDisposable
 
     private bool _timingsChanged;
 
+    private nint _tripTarget; // target when last checked (raw pointer: nothing else to do until it changes)
+
+    /// <summary>You just targeted something you can attack (as the game decides: auto-attack would work on it).</summary>
+    private bool EnemyNewlyTargeted()
+    {
+        var raw = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target;
+        if (raw == _tripTarget)
+            return false;
+        _tripTarget = raw;
+        var t = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)raw;
+        return t != null && t->ObjectKind == FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc
+               && !t->IsDead() && ActionManager.CanUseActionOnTarget(7, t);
+    }
+
     private void SetPhase(Phase phase)
     {
         if (_phase == Phase.None && phase != Phase.None)
         {
             _giddyUpBoosts = _p.Companion?.GiddyUpBoosts() == true;
+            _tripTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // already targeted: doesn't count
             _p.Companion?.TripStarted();
         }
         _phase = phase;
@@ -823,11 +838,18 @@ internal sealed unsafe class Travel : IDisposable
         }
         if (_phase != Phase.Arriving && player == null)
             return; // loading screen
-        // A fight ends the trip (targeting an enemy alone doesn't: that may be a stray tab-target).
+        // A fight ends the trip. Targeting an enemy too, if that option is on (default: rotation plugins only start
+        // the fight once the trip stops; off, a stray tab-target doesn't stop you).
         if (c[ConditionFlag.InCombat])
         {
             Plugin.Info($"{Plugin.Tag} You entered combat: trip stopped");
             Cancel("stopped (combat)", quiet: true);
+            return;
+        }
+        if (Config.StopOnEnemyTarget && EnemyNewlyTargeted())
+        {
+            Plugin.Info($"{Plugin.Tag} You targeted an enemy: trip stopped");
+            Cancel("stopped (enemy targeted)", quiet: true);
             return;
         }
 
