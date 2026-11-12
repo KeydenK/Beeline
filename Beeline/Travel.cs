@@ -664,7 +664,7 @@ internal sealed unsafe class Travel : IDisposable
         {
             // Take off and head up and toward the target, far enough to keep going until the path is ready.
             var step = Math.Min(Math.Clamp(Config.FlySpeed * 2.5f, 30f, 150f), to.Length());
-            _bridgeEnd = new Vector3(pos.X + dir.X * step, pos.Y + 15, pos.Z + dir.Y * step);
+            _bridgeEnd = new Vector3(pos.X + dir.X * step, pos.Y + 5, pos.Z + dir.Y * step);
             _p.Ipc.NavFollow([_bridgeEnd], true);
             _bridgeFlying = true;
         }
@@ -736,15 +736,6 @@ internal sealed unsafe class Travel : IDisposable
         if (mountedOnGround && next == 0 && points.Count > 1 && Vector2.Distance(Flat(points[0]), Flat(pos)) < 5f)
             next = 1;
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
-        // Mounted on the ground at the start of a flying route: first a point right above, a little ahead, so the
-        // take-off starts at once instead of riding along the ground to the first higher point.
-        if (mountedOnGround && route.Count > 0)
-        {
-            var ahead = Flat(route[0]) - Flat(pos);
-            var dir = ahead.Length() > 0.1f ? Vector2.Normalize(ahead) : Vector2.Zero;
-            route = new List<Vector3>(route.Count + 1) { new(pos.X + dir.X * 3, pos.Y + 8, pos.Z + dir.Y * 3) };
-            route.AddRange(next == 0 ? points : points.GetRange(next, points.Count - next));
-        }
         // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
         // End it where it first gets within the stop distance instead. Not when flying up to an NPC (it would stop in
         // the air); mobs are kept at a distance either way.
@@ -1201,6 +1192,25 @@ internal sealed unsafe class Travel : IDisposable
                     _navStarted = true;
                 if (moving && player != null && Watchdog(player, c))
                     return;
+                // A quest marker without an object id: look for its object/NPC on the way, once a second, and head
+                // straight for it as soon as the game has loaded it (instead of going to the marker first).
+                if (moving && !_approached && _dataId == 0 && player != null && Environment.TickCount64 >= _questScanAt)
+                {
+                    _questScanAt = Environment.TickCount64 + 1000;
+                    if (QuestObjectInArea() is { } early)
+                    {
+                        _approached = true;
+                        var range = StopDistance(early);
+                        Plugin.Info($"{Plugin.Tag} Found {Plugin.Redact(early.Name.TextValue)} on the way: heading to {range:0} y from it");
+                        _dest = early.Position;
+                        _destRange = range;
+                        _flying = c[ConditionFlag.InFlight];
+                        try { SendMove(_flying); } catch { /* vnavmesh gone */ }
+                        _navStarted = false;
+                        SetPhase(Phase.Moving);
+                        return;
+                    }
+                }
                 if (!moving && _phaseTime.Elapsed.TotalSeconds > 1.5)
                 {
                     // Went to the marker but its NPC/object only loaded on the way: walk up to it now.
@@ -1262,6 +1272,9 @@ internal sealed unsafe class Travel : IDisposable
     /// In an area marker with no NPC/object (gathering leves, fishing/mining areas...): the nearest gathering point you can
     /// use there (nearest to you once you're inside the area).
     /// </summary>
+    private const float QuestIconSearch = 60f; // around a quest icon: about the distance objects are loaded at
+    private long _questScanAt;
+
     private Dalamud.Game.ClientState.Objects.Types.IGameObject? GatheringInArea()
     {
         if (_radius <= OnMarkerWithin + 1)
@@ -1290,10 +1303,14 @@ internal sealed unsafe class Travel : IDisposable
     /// </summary>
     private unsafe Dalamud.Game.ClientState.Objects.Types.IGameObject? QuestObjectInArea()
     {
-        if (_radius <= OnMarkerWithin + 1)
-            return null;
+        // An area: anything usable in it (marked ones first). An icon (a quest marker without an area): only objects
+        // showing the game's quest marker, within the distance the game loads objects around you.
+        var area = _radius > OnMarkerWithin + 1;
+        if (!area && _targetY == null)
+            return null; // a plain spot on the map, not a quest marker
+        var searchRadius = area ? _radius + 10f : QuestIconSearch;
         var player = Plugin.ObjectTable.LocalPlayer;
-        var inArea = player != null && Vector2.Distance(Flat(player.Position), _target) <= _radius + 10f;
+        var inArea = player != null && Vector2.Distance(Flat(player.Position), _target) <= searchRadius;
         var from = inArea ? Flat(player!.Position) : _target;
         Dalamud.Game.ClientState.Objects.Types.IGameObject? best = null;
         var bestScore = float.MaxValue;
@@ -1302,15 +1319,15 @@ internal sealed unsafe class Travel : IDisposable
             if (!o.IsTargetable || o.ObjectKind is not (Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj
                                                      or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc))
                 continue;
-            if (Vector2.Distance(Flat(o.Position), _target) > _radius + 10f)
+            if (Vector2.Distance(Flat(o.Position), _target) > searchRadius)
                 continue;
             var marked = ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)o.Address)->NamePlateIconId != 0;
+            if (!area && !marked)
+                continue;
             // A marked object always beats an unmarked one; then the nearest.
             var score = Vector2.Distance(Flat(o.Position), from) + (marked ? 0f : 100_000f);
             if (score < bestScore) { bestScore = score; best = o; }
         }
-        if (best != null)
-            Plugin.Info($"Quest area: found {Plugin.Redact(best.Name.TextValue)} ({(bestScore < 100_000f ? "marked" : "no marker")})");
         return best;
     }
 
