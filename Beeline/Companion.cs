@@ -44,7 +44,10 @@ internal sealed class Companion : IDisposable
         _guDismounted = pi.GetIpcSubscriber<object>("GiddyUp.DismountedForCombat");
         _guStopRange  = pi.GetIpcSubscriber<float>("GiddyUp.EnemyStopRange");
         _guDismounted.Subscribe(OnGiddyUpDismounted);
+        _devTest = new DevTest(p); // dev builds only
     }
+
+    private readonly DevTest _devTest;
 
     public void Dispose()
     {
@@ -53,6 +56,7 @@ internal sealed class Companion : IDisposable
         _stopsForEnemies.UnregisterFunc();
         _speeds.UnregisterFunc();
         _guDismounted.Unsubscribe(OnGiddyUpDismounted);
+        _devTest.Dispose();
     }
 
     internal void TripStarted() => Send(_tripStarted);

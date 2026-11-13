@@ -329,6 +329,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private long _fallbackCheckedAt;
     private bool _fallbackMapOpen;
     private bool _fallbackAnnounced;
+    private long _fallbackOpenSince;  // when the map was first seen open (0: closed)
 
     private void OnFrameworkFallback(IFramework framework)
     {
@@ -345,6 +346,14 @@ public sealed unsafe class Plugin : IDalamudPlugin
         var map = (AddonAreaMap*)GameGui.GetAddonByName("AreaMap").Address;
         _fallbackMapOpen = map != null && map->AtkUnitBase.IsVisible;
         if (map == null)
+            return;
+        // Give the real map event a moment (0.5 s with the map open): right after Beeline loads with the map already
+        // open, the first frame comes before the first event and would raise a false alarm.
+        if (!_fallbackMapOpen)
+            _fallbackOpenSince = 0;
+        else if (_fallbackOpenSince == 0)
+            _fallbackOpenSince = now;
+        if (_fallbackMapOpen && now - _fallbackOpenSince < 500)
             return;
         if (_fallbackMapOpen && !_fallbackAnnounced)
         {
