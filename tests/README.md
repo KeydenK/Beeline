@@ -62,8 +62,7 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
   `flying` · `riding` · `walking`.
 - `route`: `direct` · `teleport` · `aethernet` · `teleport+aethernet`. `dest`: territory@(world X,Z) of the
   destination; `left`: yalms (flat) still to go; `t` / `est`: seconds since the trip started / the route's estimate.
-- `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `walkafter=1`: flying to the open sky next to a covered spot
-  (roof, arch, overhang), then on in, low. `nofly=1`: this move stays on the ground. `stuck`: Beeline's own stuck
+- `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `nofly=1`: this move stays on the ground. `stuck`: Beeline's own stuck
   watchdog stage (0 = fine).
 - `target`: what the press picked: `flag` · `marker` (quest/map marker) · `none` (a plain spot). `approached`: it
   went for the marker's NPC/object.

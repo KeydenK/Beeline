@@ -643,7 +643,6 @@ internal sealed unsafe class Travel : IDisposable
         _allowRemount = false;
         _heldPath = null;
         _noFly = false;
-        _walkAfter = null;
         _noWalk = false;
         _mountCastClock.Reset();
         _stuckStage = 0;
@@ -666,7 +665,6 @@ internal sealed unsafe class Travel : IDisposable
     private float _destRange;     // stop this close (0 = exactly there)
     private bool _flying;         // vnavmesh was asked to fly
     private bool _noFly;          // flying failed on this move (no path, can't take off, no mount): stay on the ground
-    private Vector3? _walkAfter;  // a covered spot: first to the open sky next to it, then on in to this
     private bool _noWalk;         // no walkable ground ahead while the mount comes: stay put for this move
     private bool _wantMount;      // summon a mount on the way
     private bool _sawFlying, _sawMounted;
@@ -979,41 +977,6 @@ internal sealed unsafe class Travel : IDisposable
         }
     }
 
-    /// <summary>Something solid above the spot (a roof, an arch, an overhang) within 60 y: no flying straight in.</summary>
-    private static bool Covered(Vector3 spot)
-    {
-        var from = new Vector3(spot.X, spot.Y + 2f, spot.Z);
-        return FFXIVClientStructs.FFXIV.Common.Component.BGCollision.BGCollisionModule
-            .RaycastMaterialFilter(from, new Vector3(0, 1, 0), out _, 60f);
-    }
-
-    /// <summary>
-    /// The nearest open-sky ground around a covered spot (rings of 8 points at 8, 15, 25 and 35 y, about the same
-    /// height so it's the same street, not a roof or a cliff below). A few lookups, once per trip.
-    /// </summary>
-    private Vector3? OpenLandingNear(Vector3 spot)
-    {
-        foreach (var r in new[] { 8f, 15f, 25f, 35f })
-        {
-            Vector3? best = null;
-            var bestDist = float.MaxValue;
-            for (var k = 0; k < 8; k++)
-            {
-                var a = k * MathF.PI / 4f;
-                Vector3? g;
-                try { g = _p.Ipc.NavGroundAt(spot.X + r * MathF.Cos(a), spot.Z + r * MathF.Sin(a), 3f, spot.Y + 6f); }
-                catch { return null; }
-                if (g is not { } ground || MathF.Abs(ground.Y - spot.Y) > 6f || Covered(ground))
-                    continue;
-                var d = Vector3.Distance(ground, spot);
-                if (d < bestDist) { bestDist = d; best = ground; }
-            }
-            if (best != null)
-                return best;
-        }
-        return null;
-    }
-
     /// <summary>The route cut where it first comes within <paramref name="range"/> of <paramref name="dest"/>.</summary>
     private static List<Vector3> EndWithin(List<Vector3> route, Vector3 dest, float range)
     {
@@ -1248,20 +1211,8 @@ internal sealed unsafe class Travel : IDisposable
                 catch { Cancel("failed: vnavmesh is not available"); return; }
                 if (dest == null) { Cancel("failed: no walkable ground at that spot"); return; }
 
-                // A spot under a roof, an arch or an overhang: a straight flight there runs into it from above. Fly to
-                // the open sky next to it first, then on in, low (flying is much faster than walking; if the mount
-                // really can't get in, the stuck watchdog switches to the ground).
-                Vector3? walkAfter = null;
-                if (fly && Covered(dest.Value) && OpenLandingNear(dest.Value) is { } open)
-                {
-                    Plugin.Info($"{Plugin.Tag} That spot is under cover: flying in from the open sky {Vector3.Distance(open, dest.Value):0} y away");
-                    walkAfter = dest;
-                    dest = open with { Y = open.Y + 3f }; // above it: stay in the air, no landing on the way
-                }
-
                 Plugin.Info($"{Plugin.Tag} Moving to {dest.Value} ({(fly ? "flying" : "on foot/mount")})");
                 StartMoving(player!, dest.Value, 0, fly, wantMount);
-                _walkAfter = walkAfter;
                 try { SendMove(fly); }
                 catch { Cancel("failed: vnavmesh is not available"); return; }
                 SetPhase(Phase.Moving);
@@ -1505,19 +1456,6 @@ internal sealed unsafe class Travel : IDisposable
                         SetPhase(Phase.Moving);
                         return;
                     }
-                }
-                if (!moving && _phaseTime.Elapsed.TotalSeconds > 1.5 && _walkAfter is { } rest && player != null)
-                {
-                    // Next to a covered spot, in the open: on in, still flying (low) if you are.
-                    _walkAfter = null;
-                    _flying = c[ConditionFlag.InFlight];
-                    _dest = rest;
-                    _destRange = 0;
-                    Plugin.Info($"{Plugin.Tag} In the open next to it: {(_flying ? "flying" : "going")} in, the last {Vector3.Distance(player.Position, rest):0} y");
-                    try { SendMove(_flying, bridge: false); } catch { /* vnavmesh gone */ }
-                    _navStarted = false;
-                    SetPhase(Phase.Moving);
-                    return;
                 }
                 if (!moving && _phaseTime.Elapsed.TotalSeconds > 1.5)
                 {
@@ -1861,7 +1799,7 @@ internal sealed unsafe class Travel : IDisposable
         return $"trip=on; phase={phase}; move={move}; route={_testRoute}; dest={_finalTerritory}@({_target.X:0},{_target.Y:0}); left={left:0}"
                + $"; path={(_pathTask != null ? "computing" : _heldPath != null ? "held" : "ready")}; fly={(_pathFly ? 1 : 0)}; wantmount={(_wantMount ? 1 : 0)}"
                + $"; tookoff={(_tookOff ? 1 : 0)}; jumps={_jumpPresses}; target={quest}; approached={(_approached ? 1 : 0)}"
-               + $"; walkafter={(_walkAfter != null ? 1 : 0)}; nofly={(_noFly ? 1 : 0)}"
+               + $"; nofly={(_noFly ? 1 : 0)}"
                + $"; t={_tripTime.Elapsed.TotalSeconds:0}; est={_tripEstimate:0}; stuck={_stuckStage}; {tail}";
     }
 #endif
