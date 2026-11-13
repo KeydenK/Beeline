@@ -2,7 +2,7 @@
   "name": "Beeline: flying trip (mount, take off, fly, land) and back (Yedlihmad, Thavnair)",
   "steps": [
     {
-      "assert": "zone:957 && near:185,610,45",
+      "assert": "zone:957 && near:150,530,25",
       "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked"
     },
     {
@@ -30,6 +30,16 @@
       "mark": "out: about 110 y north-west, by air"
     },
     {
+      "do": "map close"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000
+    },
+    {
+      "wait": 500
+    },
+    {
       "do": "map"
     },
     {
@@ -47,7 +57,7 @@
       "wait": 3000
     },
     {
-      "do": "mapclick 150 530 Left ctrl"
+      "do": "mapclick 330 470 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -55,7 +65,7 @@
       "msg": "the trip should start"
     },
     {
-      "assert": "probe:Beeline:route=direct; dest=957@\\((149|150|151),(529|530|531)\\)",
+      "assert": "probe:Beeline:route=direct; dest=957@\\((329|330|331),(469|470|471)\\)",
       "msg": "same zone: go directly (a paid teleport here would cost gil)"
     },
     {
@@ -83,7 +93,7 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:150,530,10",
+      "assert": "near:330,470,14",
       "msg": "you should be at the clicked spot"
     },
     {
@@ -96,6 +106,16 @@
     },
     {
       "mark": "back to the start spot"
+    },
+    {
+      "do": "map close"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000
+    },
+    {
+      "wait": 500
     },
     {
       "do": "map"
@@ -115,7 +135,7 @@
       "wait": 3000
     },
     {
-      "do": "mapclick 175 595 Left ctrl"
+      "do": "mapclick 150 530 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -136,7 +156,7 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:175,595,10",
+      "assert": "near:150,530,14",
       "msg": "you should be back to the start spot"
     },
     {

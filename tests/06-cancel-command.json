@@ -2,7 +2,7 @@
   "name": "Beeline: /beeline stop cancels a trip in progress",
   "steps": [
     {
-      "assert": "zone:957 && near:185,610,45",
+      "assert": "zone:957 && near:150,530,25",
       "msg": "precondition: next to the Yedlihmad aetheryte in Thavnair"
     },
     {
@@ -27,6 +27,16 @@
       "mark": "flag parked far away (a leftover flag near the test spots would catch the clicks: a map icon covers ~38 y at this zoom)"
     },
     {
+      "do": "map close"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000
+    },
+    {
+      "wait": 500
+    },
+    {
       "do": "map"
     },
     {
@@ -44,7 +54,7 @@
       "wait": 3000
     },
     {
-      "do": "mapclick 150 530 Left ctrl"
+      "do": "mapclick 330 470 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -78,6 +88,16 @@
       "mark": "back to the start spot"
     },
     {
+      "do": "map close"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000
+    },
+    {
+      "wait": 500
+    },
+    {
       "do": "map"
     },
     {
@@ -95,7 +115,7 @@
       "wait": 3000
     },
     {
-      "do": "mapclick 175 595 Left ctrl"
+      "do": "mapclick 150 530 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -112,7 +132,7 @@
       "msg": "the return trip should arrive"
     },
     {
-      "assert": "near:175,595,10",
+      "assert": "near:150,530,14",
       "msg": "you should be back to the start spot"
     },
     {

@@ -12,18 +12,19 @@ Scenario format and checks: `work\ClaudeTestKit\tests\README.md`.
 
 ## Test spot
 
-Test 03 walks from the **Yedlihmad aetheryte in Thavnair** to the start spot (175, 595); 04-09 start and end there
-(the aetheryte itself is on its map icon: a press there is the game's teleport, see 10) (territory 957, aetheryte at world
-X 196, Z 628; from the game data). Stand next to it, on foot, nothing targeted, flying unlocked. Each test
-flies/walks out and comes back, so the whole folder runs in one go. The destinations are fixed world spots:
+Thavnair (territory 957), open ground just outside **Yedlihmad**, checked with `/ctk spotcheck` (open sky, no
+aggressive enemies: the Gaja nearby is lv80, far below you). Test 03 starts at the Yedlihmad aetheryte and flies to the
+start spot; 04-09 start and end there; 10 ends back at the aetheryte, so the folder runs again in one go.
 
 | Spot | World X, Z | Used by |
 |---|---|---|
-| Start spot, ~40 y NW of the aetheryte | 175, 595 | 03-09 |
-| Fly target, ~110 y NW | 150, 530 | 05-09 |
+| Start spot, ~110 y NW of the aetheryte, open | 150, 530 | 03-10 |
+| Walk target, 42 y from the start | 120, 500 | (spare) |
+| Fly target, ~180 y E on a hill, open | 330, 470 | 05-09 |
 
-If a spot turns out to be bad ground (water, a roof, a wall), pick a new one with DalamudMCP `get_position`
-and change the numbers in the JSON files (the `mapclick`/`mapcursor`, `near:` and `dest=` values).
+Don't put test spots among the town's buildings (awnings, walls, water: flights bump into them, landing is refused) or
+within an aetheryte icon's reach (a click there is the game's paid teleport). Check new spots with `/ctk spotcheck x z`.
+Before each click the tests close and reopen the map (`map close`, `map`) so it shows the current zone.
 
 ## How a test starts a trip: the real map press
 
