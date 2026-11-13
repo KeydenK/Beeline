@@ -12,15 +12,15 @@ Scenario format and checks: `work\ClaudeTestKit\tests\README.md`.
 
 ## Test spot
 
-Tests 04-09 start and end at the **Yedlihmad aetheryte in Thavnair** (territory 957, aetheryte at world
+Test 03 walks from the **Yedlihmad aetheryte in Thavnair** to the start spot (175, 595); 04-09 start and end there
+(the aetheryte itself is on its map icon: a press there is the game's teleport, see 10) (territory 957, aetheryte at world
 X 196, Z 628; from the game data). Stand next to it, on foot, nothing targeted, flying unlocked. Each test
 flies/walks out and comes back, so the whole folder runs in one go. The destinations are fixed world spots:
 
 | Spot | World X, Z | Used by |
 |---|---|---|
-| Walk target, ~40 y NW | 175, 595 | 04 |
+| Start spot, ~40 y NW of the aetheryte | 175, 595 | 03-09 |
 | Fly target, ~110 y NW | 150, 530 | 05-09 |
-| Return spot, by the aetheryte | 190, 615 | 04-09 |
 
 If a spot turns out to be bad ground (water, a roof, a wall), pick a new one with DalamudMCP `get_position`
 and change the numbers in the JSON files (the `mapclick`/`mapcursor`, `near:` and `dest=` values).
@@ -61,8 +61,8 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
   `flying` · `riding` · `walking`.
 - `route`: `direct` · `teleport` · `aethernet` · `teleport+aethernet`. `dest`: territory@(world X,Z) of the
   destination; `left`: yalms (flat) still to go; `t` / `est`: seconds since the trip started / the route's estimate.
-- `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `walkafter=1`: flying to the open ground next to a covered spot
-  (roof, arch, overhang), the last stretch on foot follows. `nofly=1`: this move stays on the ground. `stuck`: Beeline's own stuck
+- `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `walkafter=1`: flying to the open sky next to a covered spot
+  (roof, arch, overhang), then on in, low. `nofly=1`: this move stays on the ground. `stuck`: Beeline's own stuck
   watchdog stage (0 = fine).
 - `target`: what the press picked: `flag` · `marker` (quest/map marker) · `none` (a plain spot). `approached`: it
   went for the marker's NPC/object.
@@ -76,8 +76,8 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
 |---|---|---|
 | 01-probe | The probe answers in the documented format; `/beeline stop` with no trip does nothing. | Anywhere, no trip running. |
 | 02-map-just-opened | The press right after the map opens (within 0.5 s) is ignored, no trip starts. | Nothing targeted, not right next to an NPC/aetheryte (the virtual Cross may also reach the game). |
-| 03-map-press-no-destination | Map open 1.2 s, Cross: Beeline sees the press (or ignores it if the map has no focus); a trip to where you stand ends by itself; no wobble/stuck/snap. | As 02, open world. |
-| 04-short-trip | Ctrl+click a spot ~40 y away: `route=direct`, reaches it, comes back; no WOBBLE/STUCK/SNAP. | Test spot, on foot. |
+| 03-short-trip | From the aetheryte, Ctrl+click the start spot ~40 y away: `route=direct`, reaches it; no WOBBLE/STUCK/SNAP. | Test spot, on foot. |
+| 04-map-press-no-destination | Map open 1.2 s, Cross: Beeline sees the press (or ignores it if the map has no focus); a trip to where you stand ends by itself; no wobble/stuck/snap. | As 02, open world. |
 | 05-flying-trip | ~110 y trip: mount summoned, take-off (`move=flying`, log "Took off"), lands at the clicked spot, flies back; no WOBBLE/STUCK/SNAP. | Test spot, on foot, flying unlocked. |
 | 06-cancel-command | `/beeline stop` mid-trip stops at once (`last=cancelled`), then returns. | Test spot. |
 | 07-cancel-by-moving | Pushing the left stick mid-trip cancels it (`last=cancelled-you-moved`, log line), then returns. WOBBLE isn't checked (you take over). | Test spot. |

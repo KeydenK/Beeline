@@ -2,11 +2,22 @@
   "name": "Beeline: controller press on the map (crosshair steered with the right stick, Cross) and back by Ctrl+click",
   "steps": [
     {
-      "assert": "zone:957 && near:196,628,30 && !mounted",
+      "assert": "zone:957 && near:185,610,45",
       "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked"
     },
     {
       "cmd": "/beeline stop"
+    },
+    {
+      "cmd": "/gaction \"Dismount\""
+    },
+    {
+      "waitFor": "!mounted",
+      "timeout": 10000,
+      "msg": "on foot before the test (the previous trip may have ended on the mount, in the air)"
+    },
+    {
+      "wait": 500
     },
     {
       "do": "flag 600 -300"
@@ -26,11 +37,17 @@
       "wait": 800
     },
     {
+      "do": "mapzoom 1.54"
+    },
+    {
+      "wait": 3000
+    },
+    {
       "do": "mapcursor 150 530 cross"
     },
     {
       "waitFor": "event:mapcursor (reached|FAILED)",
-      "timeout": 10000,
+      "timeout": 12000,
       "msg": "the Test Kit should steer the crosshair onto the spot"
     },
     {
@@ -69,7 +86,7 @@
       "msg": "you should be at the spot"
     },
     {
-      "mark": "back to the aetheryte"
+      "mark": "back to the start spot"
     },
     {
       "do": "map"
@@ -83,11 +100,17 @@
       "wait": 800
     },
     {
-      "do": "mapclick 190 615 Left ctrl"
+      "do": "mapzoom 1.54"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "do": "mapclick 175 595 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
-      "timeout": 8000,
+      "timeout": 12000,
       "msg": "the return trip should start"
     },
     {
@@ -100,8 +123,8 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:190,615,10",
-      "msg": "you should be back to the aetheryte"
+      "assert": "near:175,595,10",
+      "msg": "you should be back to the start spot"
     },
     {
       "assert": "!anomaly:WOBBLE|STUCK|SNAP",

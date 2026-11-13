@@ -8,6 +8,17 @@
       "cmd": "/beeline stop"
     },
     {
+      "do": "map close"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000,
+      "msg": "start with the map closed"
+    },
+    {
+      "wait": 500
+    },
+    {
       "do": "map"
     },
     {
@@ -34,7 +45,7 @@
       "msg": "no trip may start"
     },
     {
-      "do": "key ESCAPE"
+      "do": "map close"
     },
     {
       "waitFor": "!window:AreaMap",

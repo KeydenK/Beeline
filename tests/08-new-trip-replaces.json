@@ -2,11 +2,22 @@
   "name": "Beeline: a new destination mid-trip replaces the current trip",
   "steps": [
     {
-      "assert": "zone:957 && near:196,628,30",
+      "assert": "zone:957 && near:185,610,45",
       "msg": "precondition: next to the Yedlihmad aetheryte in Thavnair"
     },
     {
       "cmd": "/beeline stop"
+    },
+    {
+      "cmd": "/gaction \"Dismount\""
+    },
+    {
+      "waitFor": "!mounted",
+      "timeout": 10000,
+      "msg": "on foot before the test (the previous trip may have ended on the mount, in the air)"
+    },
+    {
+      "wait": 500
     },
     {
       "do": "flag 600 -300"
@@ -26,11 +37,17 @@
       "wait": 800
     },
     {
+      "do": "mapzoom 1.54"
+    },
+    {
+      "wait": 3000
+    },
+    {
       "do": "mapclick 150 530 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
-      "timeout": 8000,
+      "timeout": 12000,
       "msg": "the trip should start"
     },
     {
@@ -39,28 +56,17 @@
       "msg": "the first trip should be under way"
     },
     {
-      "wait": 3000
+      "wait": 1000
     },
     {
-      "mark": "new destination: back to the aetheryte"
+      "mark": "new destination: back to the start spot"
     },
     {
-      "do": "map"
+      "do": "mapclick 175 595 Left ctrl"
     },
     {
-      "waitFor": "window:AreaMap",
-      "timeout": 2000,
-      "msg": "the map should open"
-    },
-    {
-      "wait": 800
-    },
-    {
-      "do": "mapclick 190 615 Left ctrl"
-    },
-    {
-      "waitFor": "probe:Beeline:^trip=on; .*dest=957@\\((189|190|191),(614|615|616)\\)",
-      "timeout": 8000,
+      "waitFor": "probe:Beeline:^trip=on; .*dest=957@\\((174|175|176),(594|595|596)\\)",
+      "timeout": 12000,
       "msg": "the trip should now go to the new spot"
     },
     {
@@ -77,8 +83,8 @@
       "msg": "it should arrive"
     },
     {
-      "assert": "near:190,615,10",
-      "msg": "you should be back to the aetheryte"
+      "assert": "near:175,595,10",
+      "msg": "you should be back to the start spot"
     },
     {
       "assert": "!anomaly:STUCK|SNAP",

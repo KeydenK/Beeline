@@ -2,11 +2,22 @@
   "name": "Beeline: moving yourself (left stick) cancels a trip",
   "steps": [
     {
-      "assert": "zone:957 && near:196,628,30",
+      "assert": "zone:957 && near:185,610,45",
       "msg": "precondition: next to the Yedlihmad aetheryte in Thavnair"
     },
     {
       "cmd": "/beeline stop"
+    },
+    {
+      "cmd": "/gaction \"Dismount\""
+    },
+    {
+      "waitFor": "!mounted",
+      "timeout": 10000,
+      "msg": "on foot before the test (the previous trip may have ended on the mount, in the air)"
+    },
+    {
+      "wait": 500
     },
     {
       "do": "flag 600 -300"
@@ -26,11 +37,17 @@
       "wait": 800
     },
     {
+      "do": "mapzoom 1.54"
+    },
+    {
+      "wait": 3000
+    },
+    {
       "do": "mapclick 150 530 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
-      "timeout": 8000,
+      "timeout": 12000,
       "msg": "the trip should start"
     },
     {
@@ -57,7 +74,7 @@
       "wait": 1500
     },
     {
-      "mark": "back to the aetheryte"
+      "mark": "back to the start spot"
     },
     {
       "do": "map"
@@ -71,11 +88,17 @@
       "wait": 800
     },
     {
-      "do": "mapclick 190 615 Left ctrl"
+      "do": "mapzoom 1.54"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "do": "mapclick 175 595 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
-      "timeout": 8000,
+      "timeout": 12000,
       "msg": "the return trip should start"
     },
     {
@@ -88,8 +111,8 @@
       "msg": "the return trip should arrive"
     },
     {
-      "assert": "near:190,615,10",
-      "msg": "you should be back to the aetheryte"
+      "assert": "near:175,595,10",
+      "msg": "you should be back to the start spot"
     },
     {
       "assert": "!anomaly:STUCK|SNAP",

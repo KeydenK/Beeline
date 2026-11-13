@@ -1,12 +1,23 @@
 {
-  "name": "Beeline: short same-zone trip to a map spot (real Ctrl+click) and back (Yedlihmad, Thavnair)",
+  "name": "Beeline: short same-zone trip to a map spot (real Ctrl+click): from the aetheryte to the start spot (Yedlihmad, Thavnair)",
   "steps": [
     {
-      "assert": "zone:957 && near:196,628,30 && !mounted",
+      "assert": "zone:957 && near:185,610,45",
       "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair (see tests/README.md)"
     },
     {
       "cmd": "/beeline stop"
+    },
+    {
+      "cmd": "/gaction \"Dismount\""
+    },
+    {
+      "waitFor": "!mounted",
+      "timeout": 10000,
+      "msg": "on foot before the test (the previous trip may have ended on the mount, in the air)"
+    },
+    {
+      "wait": 500
     },
     {
       "do": "flag 600 -300"
@@ -29,11 +40,17 @@
       "wait": 800
     },
     {
+      "do": "mapzoom 1.54"
+    },
+    {
+      "wait": 3000
+    },
+    {
       "do": "mapclick 175 595 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
-      "timeout": 8000,
+      "timeout": 12000,
       "msg": "the trip should start"
     },
     {
@@ -57,41 +74,6 @@
     {
       "assert": "near:175,595,10",
       "msg": "you should be at the clicked spot"
-    },
-    {
-      "mark": "back to the aetheryte"
-    },
-    {
-      "do": "map"
-    },
-    {
-      "waitFor": "window:AreaMap",
-      "timeout": 2000,
-      "msg": "the map should open"
-    },
-    {
-      "wait": 800
-    },
-    {
-      "do": "mapclick 190 615 Left ctrl"
-    },
-    {
-      "waitFor": "probe:Beeline:^trip=on",
-      "timeout": 8000,
-      "msg": "the return trip should start"
-    },
-    {
-      "waitFor": "probe:Beeline:^trip=off",
-      "timeout": 60000,
-      "msg": "the return trip should end"
-    },
-    {
-      "assert": "probe:Beeline:last=arrived",
-      "msg": "it should end by arriving"
-    },
-    {
-      "assert": "near:190,615,10",
-      "msg": "you should be back to the aetheryte"
     },
     {
       "assert": "!anomaly:WOBBLE|STUCK|SNAP",

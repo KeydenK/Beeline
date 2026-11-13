@@ -8,6 +8,28 @@
       "cmd": "/beeline stop"
     },
     {
+      "cmd": "/gaction \"Dismount\""
+    },
+    {
+      "waitFor": "!mounted",
+      "timeout": 10000,
+      "msg": "on foot before the test (the previous trip may have ended on the mount, in the air)"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "do": "map close"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000,
+      "msg": "start with the map closed"
+    },
+    {
+      "wait": 500
+    },
+    {
       "do": "map"
     },
     {
@@ -38,7 +60,7 @@
       "cmd": "/beeline stop"
     },
     {
-      "do": "key ESCAPE"
+      "do": "map close"
     },
     {
       "waitFor": "!window:AreaMap",
