@@ -68,10 +68,11 @@ internal sealed unsafe class Travel : IDisposable
     public bool WillMount => _phase != Phase.None && (_phase != Phase.Moving || _wantMount
                              || Plugin.Condition[ConditionFlag.Mounted] || Plugin.Condition[ConditionFlag.RidingPillion]);
 
-    /// <summary>Giddy Up uses Sprint/Peloton itself (asked when the trip starts): Beeline then doesn't.</summary>
-    private bool _giddyUpBoosts;
-    /// <summary>Sprint/Peloton will be used on foot, by Beeline or by Giddy Up (for time estimates).</summary>
-    private bool BoostsOn => Config.SpeedBuffs || _giddyUpBoosts;
+    /// <summary>Giddy Up uses Sprint / Peloton itself (each asked when the trip starts): Beeline then leaves that one alone.</summary>
+    private bool _guSprint, _guPeloton;
+    /// <summary>Sprint / Peloton will be used on foot, by Beeline or by Giddy Up (for time estimates).</summary>
+    private bool SprintOn  => Config.SpeedBuffs || _guSprint;
+    private bool PelotonOn => Config.SpeedBuffs || _guPeloton;
     public string Status => _phase switch
     {
         Phase.Arriving => "Teleporting...",
@@ -367,7 +368,8 @@ internal sealed unsafe class Travel : IDisposable
     {
         if (_phase == Phase.None && phase != Phase.None)
         {
-            _giddyUpBoosts = _p.Companion?.GiddyUpBoosts() == true;
+            _guSprint  = _p.Companion?.GiddyUpSprint() == true;
+            _guPeloton = _p.Companion?.GiddyUpPeloton() == true;
             _tripTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // already targeted: doesn't count
             _tripEnemy = null;
             _p.Companion?.TripStarted();
@@ -516,7 +518,7 @@ internal sealed unsafe class Travel : IDisposable
         var basic = Math.Max(1f, CanKeepPeloton() ? Math.Max(Config.PelotonSpeed, Config.RunSpeed) : Config.RunSpeed);
         if (sameZone && player != null && player.StatusList.Any(st => st.StatusId == JogStatus))
             return path / Math.Max(basic, Config.JogSpeed);
-        if (BoostsOn && SprintReady())
+        if (SprintOn && SprintReady())
         {
             var sprint = Math.Max(1f, Config.SprintSpeed);
             var sprintPath = sprint * Config.SprintSeconds;
@@ -537,7 +539,7 @@ internal sealed unsafe class Travel : IDisposable
     private bool CanKeepPeloton()
     {
         var player = Plugin.ObjectTable.LocalPlayer;
-        return BoostsOn && player != null && player.Level >= 20 && !Plugin.Condition[ConditionFlag.InCombat]
+        return PelotonOn && player != null && player.Level >= 20 && !Plugin.Condition[ConditionFlag.InCombat]
                && player.ClassJob.RowId is 5 or 23 or 31 or 38;
     }
 
@@ -586,6 +588,8 @@ internal sealed unsafe class Travel : IDisposable
         _sawSprint = _sawPeloton = false;
         _allowRemount = false;
         _heldPath = null;
+        _noFly = false;
+        _mountCastClock.Reset();
         _stuckStage = 0;
         _stuckPos = player.Position;
         _stuckTime.Restart();
@@ -605,6 +609,7 @@ internal sealed unsafe class Travel : IDisposable
     private Vector3 _dest;        // where vnavmesh is taking you
     private float _destRange;     // stop this close (0 = exactly there)
     private bool _flying;         // vnavmesh was asked to fly
+    private bool _noFly;          // flying failed on this move (no path, can't take off, no mount): stay on the ground
     private bool _wantMount;      // summon a mount on the way
     private bool _sawFlying, _sawMounted;
     private int _mountAttempts;   // calls refused by the game (e.g. just after an instant action)
@@ -659,6 +664,7 @@ internal sealed unsafe class Travel : IDisposable
         {
             _stuckStage = 3;
             _flying = false;
+            _noFly = true;
             Plugin.Info($"{Plugin.Tag} Stuck: can't take off, going on the ground instead");
             try { _p.Ipc.NavStop(); SendMove(false); } catch { /* vnavmesh gone */ }
             return true;
@@ -1162,7 +1168,7 @@ internal sealed unsafe class Travel : IDisposable
                     // Never once you've been mounted on this move: Mount Roulette while mounted would dismount you.
                     if (_wantMount && !mounted && (!_sawMounted || _allowRemount) && !mountingNow && !c[ConditionFlag.InCombat]
                         && !c[ConditionFlag.InFlight] && !c[ConditionFlag.Jumping61] && _mountAttempts < 30
-                        && (_mountTries == 0 || (_mountTries == 1 && _phaseTime.ElapsedMilliseconds > 2500)))
+                        && (_mountTries == 0 || (_mountTries == 1 && _mountCastClock.ElapsedMilliseconds > 2500)))
                     {
                         if (SummonMount())
                         {
@@ -1184,7 +1190,7 @@ internal sealed unsafe class Travel : IDisposable
                             {
                                 hasSprint = true;
                                 sprintLeft = st.RemainingTime;
-                                if (st.RemainingTime > Config.SprintSeconds) Config.SprintSeconds = st.RemainingTime; // its full duration
+                                if (st.RemainingTime > Config.SprintSeconds) { Config.SprintSeconds = st.RemainingTime; _timingsChanged = true; } // its full duration
                             }
                             else if (st.StatusId == PelotonStatus) hasPeloton = true;
                             else if (st.StatusId == JogStatus) hasJog = true;
@@ -1198,19 +1204,19 @@ internal sealed unsafe class Travel : IDisposable
                     // (Peloton then takes over the moment Sprint ends), nor right after using Sprint (its effect takes
                     // a moment to show up: Peloton would otherwise be cast on top of it).
                     var sprintPending = _sprintUsed && !hasSprint && _sprintClock.ElapsedMilliseconds < 2000;
-                    if (Config.SpeedBuffs && !_giddyUpBoosts && !mounted && !_wantMount && !mountingNow && (!hasSprint || sprintLeft <= 2f) && !sprintPending
+                    if (Config.SpeedBuffs && !(_guSprint && _guPeloton) && !mounted && !_wantMount && !mountingNow && (!hasSprint || sprintLeft <= 2f) && !sprintPending
                         && !hasJog && _boostFails < 20
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20)
                     {
                         var am = ActionManager.Instance();
                         var used = false;
-                        if (!_sprintUsed && !hasSprint && SprintReady() && am->UseAction(ActionType.GeneralAction, SprintGeneralAction))
+                        if (!_guSprint && !_sprintUsed && !hasSprint && SprintReady() && am->UseAction(ActionType.GeneralAction, SprintGeneralAction))
                         {
                             used = _sprintUsed = true;
                             _sprintClock.Restart();
                             Plugin.Info($"{Plugin.Tag} Sprint");
                         }
-                        else if (!hasPeloton && !c[ConditionFlag.InCombat] && am->GetActionStatus(ActionType.Action, PelotonAction) == 0
+                        else if (!_guPeloton && !hasPeloton && !c[ConditionFlag.InCombat] && am->GetActionStatus(ActionType.Action, PelotonAction) == 0
                                  && am->UseAction(ActionType.Action, PelotonAction))
                         {
                             used = true;
@@ -1220,10 +1226,13 @@ internal sealed unsafe class Travel : IDisposable
                     }
 
                     // Waiting on a flying path but the mount never came (refused, combat...): go on foot instead.
-                    if (_flying && !mounted && !_sawMounted && !mountingNow && _phaseTime.ElapsedMilliseconds > 6000)
+                    if (_flying && !mounted && !_sawMounted && !mountingNow
+                        && (_mountCastClock.IsRunning ? _mountCastClock.ElapsedMilliseconds : _moveTime.ElapsedMilliseconds) > 6000)
                     {
                         _flying = false;
+                        _noFly = true;
                         _wantMount = false;
+                        _heldPath = null; // the flying path waiting for the mount: never follow it on foot
                         Plugin.Info($"{Plugin.Tag} Couldn't mount: going on foot");
                         try { SendMove(false); } catch { /* vnavmesh gone */ }
                         _phaseTime.Restart();
@@ -1232,7 +1241,7 @@ internal sealed unsafe class Travel : IDisposable
 
                     // Mounted by something else mid-way in a zone where you can fly: switch to flying. Stop first, so
                     // the new path starts from where you are (otherwise you keep going while it's computed, then turn back).
-                    if (mounted && !_flying && Config.AllowFlying && CanFly(Plugin.ClientState.TerritoryType)
+                    if (mounted && !_flying && !_noFly && Config.AllowFlying && CanFly(Plugin.ClientState.TerritoryType)
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 30f)
                     {
                         _flying = true;
@@ -1256,6 +1265,7 @@ internal sealed unsafe class Travel : IDisposable
                             {
                                 Plugin.Info($"{Plugin.Tag} No flying path found: trying on the ground");
                                 _flying = false;
+                                _noFly = true; // for this move: don't switch back to flying
                                 try { SendMove(false); } catch { Cancel("failed: vnavmesh is not available"); }
                             }
                             else

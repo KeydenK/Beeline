@@ -236,6 +236,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         // Safety net: right after a game patch Dalamud's window events can stay silent. Until one arrives, Beeline looks
         // for the map itself (see OnFrameworkFallback); it turns itself off as soon as the events work.
         Framework.Update += OnFrameworkFallback;
+        ClientState.Logout += OnLogout;
 
         Commands.AddHandler(Command, new CommandInfo(OnCommand)
         {
@@ -247,6 +248,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     {
         AddonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapUpdate);
         Framework.Update -= OnFrameworkFallback;
+        ClientState.Logout -= OnLogout;
         Commands.RemoveHandler(Command);
         Companion?.Dispose();
         Travel.Dispose();
@@ -257,6 +259,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
     }
 
     internal void SaveConfig() => PluginInterface.SavePluginConfig(Config);
+
+    /// <summary>Logging out ends any trip right away (instead of a teleport wait timing out a minute later).</summary>
+    private void OnLogout(int type, int code)
+    {
+        if (Travel.IsActive)
+            Travel.Cancel("stopped (logged out)", quiet: true);
+    }
 
     internal static bool IsPluginLoaded(string internalName)
         => PluginInterface.InstalledPlugins.Any(p => p.InternalName == internalName && p.IsLoaded);

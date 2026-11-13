@@ -18,7 +18,7 @@ internal sealed class Companion : IDisposable
     private readonly ICallGateProvider<bool> _stopsForEnemies;
     private readonly ICallGateProvider<Dictionary<string, float>> _speeds;
     private readonly ICallGateProvider<object> _tripStarted, _tripEnded;
-    private readonly ICallGateSubscriber<bool> _guBoosts, _guEnemy;
+    private readonly ICallGateSubscriber<bool> _guSprint, _guPeloton, _guEnemy;
     private readonly ICallGateSubscriber<object> _guDismounted;
     private readonly ICallGateSubscriber<float> _guStopRange;
 
@@ -38,7 +38,8 @@ internal sealed class Companion : IDisposable
         _stopsForEnemies.RegisterFunc(() => _p.Config.StopOnEnemyTarget);
         _speeds.RegisterFunc(LearnedSpeeds);
 
-        _guBoosts     = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesSpeedBuffs");
+        _guSprint     = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesSprint");
+        _guPeloton    = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesPeloton");
         _guEnemy      = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesEnemyDismount");
         _guDismounted = pi.GetIpcSubscriber<object>("GiddyUp.DismountedForCombat");
         _guStopRange  = pi.GetIpcSubscriber<float>("GiddyUp.EnemyStopRange");
@@ -64,7 +65,9 @@ internal sealed class Companion : IDisposable
     }
 
     /// <summary>Giddy Up is loaded and uses Sprint/Peloton itself (asked once per trip).</summary>
-    internal bool GiddyUpBoosts() => Ask(_guBoosts);
+    internal bool GiddyUpSprint() => Ask(_guSprint);
+    /// <summary>Giddy Up is loaded and keeps Peloton up itself (asked once per trip).</summary>
+    internal bool GiddyUpPeloton() => Ask(_guPeloton);
     /// <summary>Giddy Up is loaded and dismounts you for enemies itself (asked once per mount).</summary>
     internal bool GiddyUpEnemyDismount() => Ask(_guEnemy);
 

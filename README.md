@@ -44,7 +44,7 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
   - Mouse: **Ctrl + left click** by default. Left, right or middle click or a side button, with any mix of Ctrl, Shift and Alt.
   - Keyboard: any key you choose (with any mix of Ctrl, Shift and Alt), pressed while the mouse is over the map.
 - **You stay in control.** A trip stops as soon as you move your character, and in a few other cases (see [When does a trip stop?](#when-does-a-trip-stop)).
-- **Lightweight.** It does nothing while the map is closed and no trip is running. See [Performance](#performance).
+- **Lightweight.** With the map closed and no trip running it does next to nothing. See [Performance](#performance).
 - **Private.** Nothing is sent anywhere, and its log lines never contain your character's name or world.
 
 ## Requirements
@@ -58,7 +58,7 @@ Without Lifestream, Beeline still works inside your current zone (it just can't 
 
 ## Works great with Giddy Up
 
-[Giddy Up](https://github.com/KeydenK/GiddyUp) is a companion plugin by the same author: it mounts you up after a fight, gathering or a zone change, gets you off the mount when the enemy you target is within your attack range (landing included), and uses Sprint and Peloton when they help. With both installed, Beeline decides when to mount on its trips, Giddy Up handles the rest, and a trip stops by itself when Giddy Up gets you off for a fight. Each works fine alone.
+[Giddy Up](https://github.com/KeydenK/GiddyUp) is a companion plugin by the same author: it mounts you up after a fight, gathering or a zone change, gets you off the mount when the enemy you target is within your attack range (landing included), and uses Sprint and Peloton when they help. With both installed, Beeline decides when to mount on its trips, Giddy Up handles the rest, and Giddy Up gets you off for a fight once a trip ends (or during it, if "Stop the trip when you target an enemy" is on). Each works fine alone.
 
 To get it, add its repository the same way as Beeline's below, with this link:
 ```
@@ -111,7 +111,9 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 | Summon a mount when it's faster | Summoned while you keep moving, whenever riding or flying gets you there sooner than staying on foot (worked out from your learned speeds). Off if you'd rather mount yourself | On |
 | Mount | Mount Roulette, or any mount you've unlocked (searchable list) | Mount Roulette |
 | Fly when the zone allows it | Flies when you have all the zone's aether currents | On |
-| Sprint or Peloton on foot | Sprint when it's ready (Jog follows and lasts until you change map, mount up or fight), otherwise Peloton if your job has it | On |
+| Sprint or Peloton on foot | Sprint when it's ready (Jog follows and lasts until you change map, mount up or fight), otherwise Peloton if your job has it. With Giddy Up, each one Giddy Up uses is left to it | On |
+| Stop the trip when you target an enemy | Targeting something you can attack stops the trip so you can fight (with Giddy Up: once it's within your attack range). Being attacked never stops a trip | Off |
+| Show the time left in the server info bar | "Beeline 0:24" at the top right during a trip, from your learned speeds | Off |
 
 **Questing**
 
@@ -139,9 +141,9 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 
 - **You arrive.** (Next to the quest NPC or object, at the safe distance from quest enemies, or at the spot.)
 - **You move your character** with the left stick, the movement keys (W, A, S, D, Q, E and the arrow keys), or both mouse buttons held. Typing in chat or clicking in a plugin window doesn't count.
-- **You press the button again** on something else: the new trip replaces the old one.
+- **You press the button again** on something else: the new trip replaces the old one (not while a teleport is under way: Lifestream is busy then).
 - **You type `/beeline stop`**, or click **Stop** in the settings window.
-- **You change zone** after arriving (a duty pops, you teleport yourself, you log out...).
+- **You change zone** after arriving (a duty pops, you teleport yourself...), or **you log out**.
 - **You target an enemy**, if "Stop the trip when you target an enemy" is on (with Giddy Up: once it's within your attack range).
 - **Something goes wrong**, with a chat message: the teleport is refused (in combat, not enough gil...), there's no walkable ground near the spot, the teleport takes longer than 60 seconds, or vnavmesh isn't ready after 2 minutes.
 
@@ -216,7 +218,7 @@ Like every third-party tool, Dalamud plugins are against the game's terms of ser
 
 Beeline is built to cost nothing when you're not using it:
 
-- **Map closed and no trip running:** it does nothing at all.
+- **Map closed and no trip running:** nothing, apart from a tiny "is the map open?" look 10 times a second until you first open the map in a session (a safety net in case the game's map events stop arriving after a patch; it turns itself off as soon as they arrive).
 - **Map open:** one quick check per frame for your button or click.
 - **During a trip:** a check for your own movement every frame (so stopping is instant), and the trip steps 10 times a second, until you arrive.
 - **At load:** the aetheryte list is built once, in the background.

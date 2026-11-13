@@ -79,8 +79,8 @@ internal sealed unsafe class ConfigWindow : Window
             Companion("Giddy Up", "https://raw.githubusercontent.com/KeydenK/GiddyUp/main/repo.json",
                       "Mounting and dismounting done for you: it mounts you up after a fight, gathering or a zone "
                     + "change, gets you off the mount when the enemy you target is within your attack range (landing "
-                    + "included), and uses Sprint and Peloton when they help. Together, Beeline trips stop by "
-                    + "themselves to let you fight.");
+                    + "included), and uses Sprint and Peloton when they help. Together, Beeline decides mounting on its "
+                    + "trips and Giddy Up gets you off for the fight.");
 
         if (_plugin.Travel.IsActive)
         {
