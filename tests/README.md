@@ -12,26 +12,33 @@ Scenario format and checks: `work\ClaudeTestKit\tests\README.md`.
 
 ## Test spot
 
-Tests 04-08 start and end at the **Yedlihmad aetheryte in Thavnair** (territory 957, aetheryte at world
+Tests 04-09 start at the **Yedlihmad aetheryte in Thavnair** and end ~50 y west of it (territory 957, aetheryte at world
 X 196, Z 628; from the game data). Stand next to it, on foot, nothing targeted, flying unlocked. Each test
 flies/walks out and comes back, so the whole folder runs in one go. The destinations are fixed world spots:
 
 | Spot | World X, Z | Used by |
 |---|---|---|
-| Walk target, ~40 y NW | 175, 595 | 04 |
-| Fly target, ~110 y NW | 150, 530 | 05-08 |
-| Return spot, by the aetheryte | 190, 615 | 04-08 |
+| Walk target, ~65 y NW | 170, 570 | 04 |
+| Fly target, ~110 y NW | 150, 530 | 05-09 |
+| Return spot, ~50 y W of the aetheryte | 150, 650 | 04-09 |
 
 If a spot turns out to be bad ground (water, a roof, a wall), pick a new one with DalamudMCP `get_position`
-and change the numbers in the JSON files (the `flag`, `near:` and `dest=` values).
+and change the numbers in the JSON files (the `mapclick`/`mapcursor`, `near:` and `dest=` values).
 
-## How a test starts a trip: `/beeline testflag`
+## How a test starts a trip: the real map press
 
-A player points the map cursor at a spot and presses the map button. A scenario can't steer the map cursor to
-a world spot, so dev builds have a hidden subcommand: `/beeline testflag` starts the same trip as pressing the
-map button with the cursor on your flag (same `Travel.Start` call: route choice, mount, take-off, vnavmesh,
-arrival). It does nothing in installed (non-dev) builds and isn't in the help text. Tests set the flag with
-`/ctk flag <x> <z>` first. The map press itself is covered by 02 and 03.
+Every trip starts the way a player starts it, with the Test Kit's real-looking input:
+
+- `/ctk mapclick <x> <z> Left ctrl`: focuses the map, glides the mouse to where world spot (x, z) is drawn and
+  Ctrl+clicks it (Beeline's default mouse trigger). Works with the game in the background.
+- `/ctk mapcursor <x> <z> cross`: steers the map's controller crosshair onto the spot with the right stick, then
+  presses Cross (09). Its result shows as the event `mapcursor reached` / `mapcursor FAILED`.
+
+Each test first opens the map (`do: map`), waits 0.8 s (a press right after the map opens is ignored on purpose,
+see 02), and parks the flag far away (`flag 600 -300`): a map icon covers ~38 y at the default zoom, so a leftover
+flag next to a test spot would catch the click (Beeline goes to the icon under the cursor, as for a player).
+Test spots stay more than ~40 y from every map icon (the aetheryte, the Gemstone Trader): clicking within an icon's
+reach goes to that icon (on an aetheryte that means a paid teleport). The clicked spot lands within a yalm or two of the target, so `dest=` checks allow +/-1 (the crosshair +/-6).
 
 ## The probe
 
@@ -68,11 +75,12 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
 | 01-probe | The probe answers in the documented format; `/beeline stop` with no trip does nothing. | Anywhere, no trip running. |
 | 02-map-just-opened | The press right after the map opens (within 0.5 s) is ignored, no trip starts. | Nothing targeted, not right next to an NPC/aetheryte (the virtual Cross may also reach the game). |
 | 03-map-press-no-destination | Map open 1.2 s, Cross: Beeline sees the press (or ignores it if the map has no focus); a trip to where you stand ends by itself; no wobble/stuck/snap. | As 02, open world. |
-| 04-short-trip | Short trip to the flag (~40 y): `route=direct`, reaches the flag, comes back; no WOBBLE/STUCK/SNAP. | Test spot, on foot. |
-| 05-flying-trip | ~110 y trip: mount summoned, take-off (`move=flying`, log "Took off"), lands at the flag, flies back; no WOBBLE/STUCK/SNAP. | Test spot, on foot, flying unlocked. |
+| 04-short-trip | Ctrl+click a spot ~40 y away: `route=direct`, reaches it, comes back; no WOBBLE/STUCK/SNAP. | Test spot, on foot. |
+| 05-flying-trip | ~110 y trip: mount summoned, take-off (`move=flying`, log "Took off"), lands at the clicked spot, flies back; no WOBBLE/STUCK/SNAP. | Test spot, on foot, flying unlocked. |
 | 06-cancel-command | `/beeline stop` mid-trip stops at once (`last=cancelled`), then returns. | Test spot. |
 | 07-cancel-by-moving | Pushing the left stick mid-trip cancels it (`last=cancelled-you-moved`, log line), then returns. WOBBLE isn't checked (you take over). | Test spot. |
 | 08-new-trip-replaces | A new destination mid-trip replaces the trip (log "Trip replaced", probe `dest` changes) and arrives there. WOBBLE isn't checked (turning back is intended). | Test spot. |
+| 09-controller-press | Crosshair steered onto a spot ~110 y away with the right stick, then Cross: "Controller on map", position from the crosshair, trip there; back by Ctrl+click. | Test spot, on foot, flying unlocked. |
 
 Costs: 04-08 should never pay for a teleport (all trips are short, same zone, `route=direct` is asserted). If
 Beeline ever picks a teleport there, the assert fails, but the teleport still happens and costs gil.
@@ -84,8 +92,7 @@ Beeline ever picks a teleport there, the assert fails, but the teleport still ha
   Cross, expect `route=teleport...`, `phase=teleporting`, then the usual move.
 - **Quest search** (quest markers, NPC/object on arrival, targeting on arrival, quest areas): needs suitable
   quests in the journal; the probe shows `target=marker` and `approached=1` while you test by hand.
-- **Mouse and keyboard triggers** (Ctrl + left click, the hotkey): need the map's position on screen to click on.
-- **Pad press with the cursor moved to a spot** (crosshair maths): needs the map cursor steered on the map.
+- **The keyboard hotkey trigger** (off by default): press it with the mouse over the map.
 - **Enemy targeted stops the trip, Giddy Up dismount for a fight**: need enemies around (and the option on).
 - **Trip timer in the server info bar**: off by default; turn it on in the settings and watch the info bar
   (the probe's `t` / `est` give the numbers).

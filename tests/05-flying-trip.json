@@ -1,30 +1,127 @@
 {
   "name": "Beeline: flying trip (mount, take off, fly, land) and back (Yedlihmad, Thavnair)",
   "steps": [
-    { "assert": "zone:957 && near:196,628,30 && !mounted", "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked" },
-    { "cmd": "/beeline stop" },
-    { "mark": "out: about 110 y north-west, by air" },
-    { "do": "flag 150 530" },
-    { "cmd": "/beeline testflag" },
-    { "waitFor": "probe:Beeline:^trip=on", "timeout": 3000, "msg": "the trip should start" },
-    { "assert": "probe:Beeline:route=direct; dest=957@\\(150,530\\)", "msg": "same zone: go directly (a paid teleport here would cost gil)" },
-    { "waitFor": "probe:Beeline:phase=moving; move=(mounting|takeoff|flying)", "timeout": 15000, "msg": "the move should start by summoning the mount" },
-    { "waitFor": "mounted", "timeout": 15000, "msg": "the mount should come" },
-    { "waitFor": "probe:Beeline:move=flying", "timeout": 20000, "msg": "Beeline should take off" },
-    { "waitFor": "probe:Beeline:^trip=off", "timeout": 90000, "msg": "the trip should end" },
-    { "assert": "probe:Beeline:last=arrived", "msg": "it should end by arriving" },
-    { "assert": "near:150,530,10", "msg": "you should be at the flag" },
-    { "assert": "event:\\[Beeline\\] Took off", "msg": "the log should show the take-off" },
-    { "assert": "!anomaly:WOBBLE|STUCK|SNAP", "msg": "no wobble, stuck or position snap on the flight" },
-    { "mark": "back to the aetheryte" },
-    { "do": "flag 190 615" },
-    { "cmd": "/beeline testflag" },
-    { "waitFor": "probe:Beeline:^trip=on", "timeout": 3000, "msg": "the return trip should start" },
-    { "assert": "probe:Beeline:route=direct", "msg": "the way back should also go directly" },
-    { "waitFor": "probe:Beeline:^trip=off", "timeout": 90000, "msg": "the return trip should end" },
-    { "assert": "probe:Beeline:last=arrived", "msg": "it should end by arriving" },
-    { "assert": "near:190,615,10", "msg": "you should be back at the aetheryte" },
-    { "assert": "!anomaly:WOBBLE|STUCK|SNAP", "msg": "no wobble, stuck or position snap during the trips" },
-    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+    {
+      "assert": "zone:957 && near:180,640,60 && !mounted",
+      "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked"
+    },
+    {
+      "cmd": "/beeline stop"
+    },
+    {
+      "do": "flag 600 -300"
+    },
+    {
+      "mark": "flag parked far away (a leftover flag near the test spots would catch the clicks: a map icon covers ~38 y at this zoom)"
+    },
+    {
+      "mark": "out: about 110 y north-west, by air"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "do": "mapclick 150 530 Left ctrl"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=on",
+      "timeout": 8000,
+      "msg": "the trip should start"
+    },
+    {
+      "assert": "probe:Beeline:route=direct; dest=957@\\((149|150|151),(529|530|531)\\)",
+      "msg": "same zone: go directly (a paid teleport here would cost gil)"
+    },
+    {
+      "waitFor": "probe:Beeline:phase=moving; move=(mounting|takeoff|flying)",
+      "timeout": 15000,
+      "msg": "the move should start by summoning the mount"
+    },
+    {
+      "waitFor": "mounted",
+      "timeout": 15000,
+      "msg": "the mount should come"
+    },
+    {
+      "waitFor": "probe:Beeline:move=flying",
+      "timeout": 20000,
+      "msg": "Beeline should take off"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 90000,
+      "msg": "the trip should end"
+    },
+    {
+      "assert": "probe:Beeline:last=arrived",
+      "msg": "it should end by arriving"
+    },
+    {
+      "assert": "near:150,530,10",
+      "msg": "you should be at the clicked spot"
+    },
+    {
+      "assert": "event:\\[Beeline\\] Took off",
+      "msg": "the log should show the take-off"
+    },
+    {
+      "assert": "!anomaly:WOBBLE|STUCK|SNAP",
+      "msg": "no wobble, stuck or position snap on the flight"
+    },
+    {
+      "mark": "back near the aetheryte"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "do": "mapclick 150 650 Left ctrl"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=on",
+      "timeout": 8000,
+      "msg": "the return trip should start"
+    },
+    {
+      "assert": "probe:Beeline:route=direct",
+      "msg": "the way back should also go directly"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 90000,
+      "msg": "the return trip should end"
+    },
+    {
+      "assert": "probe:Beeline:last=arrived",
+      "msg": "it should end by arriving"
+    },
+    {
+      "assert": "near:150,650,10",
+      "msg": "you should be back near the aetheryte"
+    },
+    {
+      "assert": "!anomaly:WOBBLE|STUCK|SNAP",
+      "msg": "no wobble, stuck or position snap during the trips"
+    },
+    {
+      "assert": "!event:\\[ERR\\] \\[Beeline\\]",
+      "msg": "no errors from Beeline"
+    }
   ]
 }

@@ -9,6 +9,11 @@
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
+    <!-- Dev-only test tools: in local builds only; the GitHub release build (CI=true) leaves them out. -->
+    <PropertyGroup Condition="'$(CI)' != 'true'">
+        <DefineConstants>$(DefineConstants);DEVTOOLS</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
         <!-- Shown in the plugin installer for dev builds, and shipped inside the release zip. -->
         <Content Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" Link="images\icon.png" />

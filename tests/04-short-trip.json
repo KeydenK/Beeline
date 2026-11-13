@@ -1,25 +1,105 @@
 {
-  "name": "Beeline: short same-zone trip to the flag and back (Yedlihmad, Thavnair)",
+  "name": "Beeline: short same-zone trip to a map spot (real Ctrl+click) and back (Yedlihmad, Thavnair)",
   "steps": [
-    { "assert": "zone:957 && near:196,628,30 && !mounted", "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair (see tests/README.md)" },
-    { "cmd": "/beeline stop" },
-    { "mark": "out: about 40 y north-west" },
-    { "do": "flag 175 595" },
-    { "cmd": "/beeline testflag" },
-    { "waitFor": "probe:Beeline:^trip=on", "timeout": 3000, "msg": "the trip should start" },
-    { "assert": "probe:Beeline:route=direct; dest=957@\\(175,595\\)", "msg": "same zone, short: go directly (no paid teleport) to the flag" },
-    { "waitFor": "probe:Beeline:phase=moving", "timeout": 15000, "msg": "vnavmesh should be ready and the move start" },
-    { "waitFor": "probe:Beeline:^trip=off", "timeout": 60000, "msg": "the trip should end" },
-    { "assert": "probe:Beeline:last=arrived", "msg": "it should end by arriving" },
-    { "assert": "near:175,595,10", "msg": "you should be at the flag" },
-    { "mark": "back to the aetheryte" },
-    { "do": "flag 190 615" },
-    { "cmd": "/beeline testflag" },
-    { "waitFor": "probe:Beeline:^trip=on", "timeout": 3000, "msg": "the return trip should start" },
-    { "waitFor": "probe:Beeline:^trip=off", "timeout": 60000, "msg": "the return trip should end" },
-    { "assert": "probe:Beeline:last=arrived", "msg": "it should end by arriving" },
-    { "assert": "near:190,615,10", "msg": "you should be back at the aetheryte" },
-    { "assert": "!anomaly:WOBBLE|STUCK|SNAP", "msg": "no wobble, stuck or position snap during the trips" },
-    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+    {
+      "assert": "zone:957 && near:180,640,60 && !mounted",
+      "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair (see tests/README.md)"
+    },
+    {
+      "cmd": "/beeline stop"
+    },
+    {
+      "do": "flag 600 -300"
+    },
+    {
+      "mark": "flag parked far away (a leftover flag near the test spots would catch the clicks: a map icon covers ~38 y at this zoom)"
+    },
+    {
+      "mark": "out: about 40 y north-west"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "do": "mapclick 170 570 Left ctrl"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=on",
+      "timeout": 8000,
+      "msg": "the trip should start"
+    },
+    {
+      "assert": "probe:Beeline:route=direct; dest=957@\\((169|170|171),(569|570|571)\\)",
+      "msg": "same zone, short: go directly (no paid teleport) to the clicked spot"
+    },
+    {
+      "waitFor": "probe:Beeline:phase=moving",
+      "timeout": 15000,
+      "msg": "vnavmesh should be ready and the move start"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 60000,
+      "msg": "the trip should end"
+    },
+    {
+      "assert": "probe:Beeline:last=arrived",
+      "msg": "it should end by arriving"
+    },
+    {
+      "assert": "near:170,570,10",
+      "msg": "you should be at the clicked spot"
+    },
+    {
+      "mark": "back near the aetheryte"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "do": "mapclick 150 650 Left ctrl"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=on",
+      "timeout": 8000,
+      "msg": "the return trip should start"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 60000,
+      "msg": "the return trip should end"
+    },
+    {
+      "assert": "probe:Beeline:last=arrived",
+      "msg": "it should end by arriving"
+    },
+    {
+      "assert": "near:150,650,10",
+      "msg": "you should be back near the aetheryte"
+    },
+    {
+      "assert": "!anomaly:WOBBLE|STUCK|SNAP",
+      "msg": "no wobble, stuck or position snap during the trips"
+    },
+    {
+      "assert": "!event:\\[ERR\\] \\[Beeline\\]",
+      "msg": "no errors from Beeline"
+    }
   ]
 }

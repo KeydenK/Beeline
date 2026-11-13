@@ -1,18 +1,57 @@
 {
   "name": "Beeline: map button with the cursor where you stand does nothing harmful",
   "steps": [
-    { "mark": "precondition: nothing targeted, not right next to an NPC or the aetheryte; the map opens centred on you" },
-    { "cmd": "/beeline stop" },
-    { "do": "map" },
-    { "waitFor": "window:AreaMap", "timeout": 2000, "msg": "the map should open" },
-    { "wait": 1200 },
-    { "do": "pad Cross 80" },
-    { "waitFor": "event:\\[Beeline\\] (Controller on map|Button ignored)", "timeout": 2000, "msg": "Beeline should see the press (on the map, or ignored because the map has no focus)" },
-    { "waitFor": "probe:Beeline:^trip=off", "timeout": 20000, "msg": "a trip to where you already stand must end by itself" },
-    { "cmd": "/beeline stop" },
-    { "do": "key ESCAPE" },
-    { "waitFor": "!window:AreaMap", "timeout": 2000, "msg": "the map should close" },
-    { "assert": "!anomaly:WOBBLE|STUCK|SNAP", "msg": "no wobble, stuck or position snap" },
-    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+    {
+      "mark": "precondition: nothing targeted, not right next to an NPC or the aetheryte; the map opens centred on you"
+    },
+    {
+      "cmd": "/beeline stop"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "do": "focus AreaMap"
+    },
+    {
+      "do": "pad Cross 80"
+    },
+    {
+      "waitFor": "event:\\[Beeline\\] (Controller on map|Button ignored)",
+      "timeout": 2000,
+      "msg": "Beeline should see the press (on the map, or ignored because the map has no focus)"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 20000,
+      "msg": "a trip to where you already stand must end by itself"
+    },
+    {
+      "cmd": "/beeline stop"
+    },
+    {
+      "do": "key ESCAPE"
+    },
+    {
+      "waitFor": "!window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should close"
+    },
+    {
+      "assert": "!anomaly:WOBBLE|STUCK|SNAP",
+      "msg": "no wobble, stuck or position snap"
+    },
+    {
+      "assert": "!event:\\[ERR\\] \\[Beeline\\]",
+      "msg": "no errors from Beeline"
+    }
   ]
 }

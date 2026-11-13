@@ -143,8 +143,10 @@ internal sealed unsafe class Travel : IDisposable
 
         Plugin.Info($"{Plugin.Tag} Travel to ({mapCoords.X:0.0}, {mapCoords.Y:0.0}) \"{Plugin.Redact(tooltip)}\" in territory {territory}: {route.Value.Describe}");
         var r = route.Value;
+#if DEVTOOLS
         _testRoute = r.ThenShard != 0 ? "teleport+aethernet" : r.FirstHop switch { Hop.Teleport => "teleport", Hop.Aethernet => "aethernet", _ => "direct" };
         _testMarker = marker?.Label ?? "";
+#endif
         _tripEstimate = r.Cost;
         _territory  = r.ThenShard != 0 ? r.FirstTerritory : territory;
         _finalTerritory = territory;
@@ -211,8 +213,10 @@ internal sealed unsafe class Travel : IDisposable
         _pendingShard   = shard.Id;
         _shardArrival   = shard.Position;
         _endOnArrival   = true;
+#if DEVTOOLS
         _testRoute      = "teleport+aethernet";
         _testMarker     = "";
+#endif
         _target         = shard.Position ?? default;
         _targetY        = null;
         _dataId         = 0;
@@ -232,7 +236,9 @@ internal sealed unsafe class Travel : IDisposable
         if (_phase == Phase.None) return;
         if (!quiet) Plugin.Chat.Print($"Beeline: trip {why}.");
         Plugin.Info($"Trip {why}"); // every end of a trip is in the log, with its reason
+#if DEVTOOLS
         _testLast = why;
+#endif
         var wasTeleporting = _phase == Phase.Arriving && _arrival != null;
         Stop();
         try { _p.Ipc.NavStop(); } catch { /* vnavmesh missing */ }
@@ -378,9 +384,11 @@ internal sealed unsafe class Travel : IDisposable
             _tripTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // already targeted: doesn't count
             _tripEnemy = null;
             _p.Companion?.TripStarted();
+#if DEVTOOLS
             _testTrips++;
             _testLast = "";
             _testLastLeft = -1;
+#endif
         }
         _phase = phase;
         _phaseTime.Restart();
@@ -1138,7 +1146,9 @@ internal sealed unsafe class Travel : IDisposable
                 }
                 if (_endOnArrival)
                 {
+#if DEVTOOLS
                     _testLast = "arrived";
+#endif
                     Plugin.Info($"{Plugin.Tag} Arrived");
                     Stop();
                     return;
@@ -1482,8 +1492,10 @@ internal sealed unsafe class Travel : IDisposable
                     if (_navStarted)
                         LearnSpeeds(player!);
                     var left = Vector2.Distance(Flat(player!.Position), _target);
+#if DEVTOOLS
                     _testLast = _navStarted ? "arrived" : "no-path";
                     _testLastLeft = left;
+#endif
                     Stop();
                     Plugin.Info(_navStarted
                         ? $"{Plugin.Tag} vnavmesh stopped after {_phaseTime.Elapsed.TotalSeconds:0.0} s, {left:0.0} y from the target"
@@ -1743,6 +1755,7 @@ internal sealed unsafe class Travel : IDisposable
 
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
 
+#if DEVTOOLS
     // ---------------- Dev-build test probe (read only; see TestProbe.cs) ----------------
 
     private string _testRoute = "", _testMarker = "", _testLast = "";
@@ -1784,6 +1797,7 @@ internal sealed unsafe class Travel : IDisposable
                + $"; tookoff={(_tookOff ? 1 : 0)}; jumps={_jumpPresses}; target={quest}; approached={(_approached ? 1 : 0)}"
                + $"; t={_tripTime.Elapsed.TotalSeconds:0}; est={_tripEstimate:0}; stuck={_stuckStage}; {tail}";
     }
+#endif
 
     private const uint MountRouletteAction = 9;
 

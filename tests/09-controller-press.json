@@ -1,0 +1,115 @@
+{
+  "name": "Beeline: controller press on the map (crosshair steered with the right stick, Cross) and back by Ctrl+click",
+  "steps": [
+    {
+      "assert": "zone:957 && near:180,640,60 && !mounted",
+      "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked"
+    },
+    {
+      "cmd": "/beeline stop"
+    },
+    {
+      "do": "flag 600 -300"
+    },
+    {
+      "mark": "flag parked far away (a leftover flag near the test spots would catch the press)"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "do": "mapcursor 150 530 cross"
+    },
+    {
+      "waitFor": "event:mapcursor (reached|FAILED)",
+      "timeout": 10000,
+      "msg": "the Test Kit should steer the crosshair onto the spot"
+    },
+    {
+      "assert": "!event:mapcursor FAILED",
+      "msg": "the crosshair should reach the spot"
+    },
+    {
+      "waitFor": "event:\\[Beeline\\] Controller on map",
+      "timeout": 3000,
+      "msg": "Beeline should see the press on the focused map"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=on",
+      "timeout": 5000,
+      "msg": "the trip should start"
+    },
+    {
+      "assert": "probe:Beeline:dest=957@\\((14[4-9]|15[0-6]),(52[4-9]|53[0-6])\\)",
+      "msg": "to the spot under the crosshair (within a few yalms)"
+    },
+    {
+      "assert": "event:\\[Beeline\\] Crosshair position",
+      "msg": "the position should come from the crosshair, not the stale readout"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 90000,
+      "msg": "the trip should end"
+    },
+    {
+      "assert": "probe:Beeline:last=arrived",
+      "msg": "it should end by arriving"
+    },
+    {
+      "assert": "near:150,530,12",
+      "msg": "you should be at the spot"
+    },
+    {
+      "mark": "back near the aetheryte"
+    },
+    {
+      "do": "map"
+    },
+    {
+      "waitFor": "window:AreaMap",
+      "timeout": 2000,
+      "msg": "the map should open"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "do": "mapclick 150 650 Left ctrl"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=on",
+      "timeout": 8000,
+      "msg": "the return trip should start"
+    },
+    {
+      "waitFor": "probe:Beeline:^trip=off",
+      "timeout": 90000,
+      "msg": "the return trip should end"
+    },
+    {
+      "assert": "probe:Beeline:last=arrived",
+      "msg": "it should end by arriving"
+    },
+    {
+      "assert": "near:150,650,10",
+      "msg": "you should be back near the aetheryte"
+    },
+    {
+      "assert": "!anomaly:WOBBLE|STUCK|SNAP",
+      "msg": "no wobble, stuck or position snap"
+    },
+    {
+      "assert": "!event:\\[ERR\\] \\[Beeline\\]",
+      "msg": "no errors from Beeline"
+    }
+  ]
+}
