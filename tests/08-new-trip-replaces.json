@@ -1,0 +1,21 @@
+{
+  "name": "Beeline: a new destination mid-trip replaces the current trip",
+  "steps": [
+    { "assert": "zone:957 && near:196,628,30", "msg": "precondition: next to the Yedlihmad aetheryte in Thavnair" },
+    { "cmd": "/beeline stop" },
+    { "do": "flag 150 530" },
+    { "cmd": "/beeline testflag" },
+    { "waitFor": "probe:Beeline:phase=moving", "timeout": 15000, "msg": "the first trip should be under way" },
+    { "wait": 3000 },
+    { "mark": "new destination: back to the aetheryte" },
+    { "do": "flag 190 615" },
+    { "cmd": "/beeline testflag" },
+    { "waitFor": "probe:Beeline:^trip=on; .*dest=957@\\(190,615\\)", "timeout": 3000, "msg": "the trip should now go to the new flag" },
+    { "assert": "event:\\[Beeline\\] Trip replaced", "msg": "the first trip should end as replaced" },
+    { "waitFor": "probe:Beeline:^trip=off", "timeout": 90000, "msg": "the new trip should end" },
+    { "assert": "probe:Beeline:last=arrived", "msg": "it should arrive" },
+    { "assert": "near:190,615,10", "msg": "you should be back at the aetheryte" },
+    { "assert": "!anomaly:STUCK|SNAP", "msg": "no stuck or position snap (turning back is intended here, so WOBBLE is not checked)" },
+    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+  ]
+}

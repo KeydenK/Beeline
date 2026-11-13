@@ -242,10 +242,14 @@ public sealed unsafe class Plugin : IDalamudPlugin
         {
             HelpMessage = "Open the settings.\n/beeline stop → Cancel the current trip.",
         });
+
+        // Dev builds only (TestProbe checks IsDev): lets Claude's scenario tests ask what the trip is doing.
+        TestProbe.Register(PluginInterface, "Beeline", Travel.TestState);
     }
 
     public void Dispose()
     {
+        TestProbe.Unregister();
         AddonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapUpdate);
         Framework.Update -= OnFrameworkFallback;
         ClientState.Logout -= OnLogout;
@@ -274,8 +278,37 @@ public sealed unsafe class Plugin : IDalamudPlugin
     {
         if (args.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase))
             Travel.Cancel("cancelled");
+        else if (PluginInterface.IsDev && args.Trim().Equals("testflag", StringComparison.OrdinalIgnoreCase))
+            TestTravelToFlag();
         else
             _configWindow.Toggle();
+    }
+
+    /// <summary>
+    /// Dev builds only, for scenario tests (not in the help text): the same trip as pressing the map button with the
+    /// map cursor on your flag, without needing to steer the cursor. Map presses themselves are tested separately.
+    /// </summary>
+    private void TestTravelToFlag()
+    {
+        var agent = AgentMap.Instance();
+        if (agent == null || agent->FlagMarkerCount == 0)
+        {
+            Info($"{Tag} testflag: no flag set");
+            return;
+        }
+        var flag = agent->FlagMapMarkers[0];
+        if (!Data.GetExcelSheet<Lumina.Excel.Sheets.Map>().TryGetRow(flag.MapId, out var mapRow) || mapRow.SizeFactor == 0)
+        {
+            Info($"{Tag} testflag: unknown map {flag.MapId}");
+            return;
+        }
+        var world = new Vector2(flag.XFloat, flag.YFloat);
+        // Map coordinates (only shown in the log): inverse of Places.MapToWorld.
+        var coords = new Vector2(
+            (world.X + mapRow.OffsetX + 102400f / mapRow.SizeFactor) / 50f + 1f,
+            (world.Y + mapRow.OffsetY + 102400f / mapRow.SizeFactor) / 50f + 1f);
+        Info($"{Tag} testflag: travel to the flag at ({world.X:0.0}, {world.Y:0.0}) in territory {flag.TerritoryId}");
+        Travel.Start(flag.TerritoryId, flag.MapId, coords, "", 0f, world: world);
     }
 
     internal static readonly GamepadButtons[] AllPadButtons =

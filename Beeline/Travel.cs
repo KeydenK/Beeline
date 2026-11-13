@@ -143,6 +143,8 @@ internal sealed unsafe class Travel : IDisposable
 
         Plugin.Info($"{Plugin.Tag} Travel to ({mapCoords.X:0.0}, {mapCoords.Y:0.0}) \"{Plugin.Redact(tooltip)}\" in territory {territory}: {route.Value.Describe}");
         var r = route.Value;
+        _testRoute = r.ThenShard != 0 ? "teleport+aethernet" : r.FirstHop switch { Hop.Teleport => "teleport", Hop.Aethernet => "aethernet", _ => "direct" };
+        _testMarker = marker?.Label ?? "";
         _tripEstimate = r.Cost;
         _territory  = r.ThenShard != 0 ? r.FirstTerritory : territory;
         _finalTerritory = territory;
@@ -209,6 +211,8 @@ internal sealed unsafe class Travel : IDisposable
         _pendingShard   = shard.Id;
         _shardArrival   = shard.Position;
         _endOnArrival   = true;
+        _testRoute      = "teleport+aethernet";
+        _testMarker     = "";
         _target         = shard.Position ?? default;
         _targetY        = null;
         _dataId         = 0;
@@ -228,6 +232,7 @@ internal sealed unsafe class Travel : IDisposable
         if (_phase == Phase.None) return;
         if (!quiet) Plugin.Chat.Print($"Beeline: trip {why}.");
         Plugin.Info($"Trip {why}"); // every end of a trip is in the log, with its reason
+        _testLast = why;
         var wasTeleporting = _phase == Phase.Arriving && _arrival != null;
         Stop();
         try { _p.Ipc.NavStop(); } catch { /* vnavmesh missing */ }
@@ -373,6 +378,9 @@ internal sealed unsafe class Travel : IDisposable
             _tripTarget = (nint)FFXIVClientStructs.FFXIV.Client.Game.Control.TargetSystem.Instance()->Target; // already targeted: doesn't count
             _tripEnemy = null;
             _p.Companion?.TripStarted();
+            _testTrips++;
+            _testLast = "";
+            _testLastLeft = -1;
         }
         _phase = phase;
         _phaseTime.Restart();
@@ -1130,6 +1138,7 @@ internal sealed unsafe class Travel : IDisposable
                 }
                 if (_endOnArrival)
                 {
+                    _testLast = "arrived";
                     Plugin.Info($"{Plugin.Tag} Arrived");
                     Stop();
                     return;
@@ -1472,8 +1481,10 @@ internal sealed unsafe class Travel : IDisposable
 
                     if (_navStarted)
                         LearnSpeeds(player!);
-                    Stop();
                     var left = Vector2.Distance(Flat(player!.Position), _target);
+                    _testLast = _navStarted ? "arrived" : "no-path";
+                    _testLastLeft = left;
+                    Stop();
                     Plugin.Info(_navStarted
                         ? $"{Plugin.Tag} vnavmesh stopped after {_phaseTime.Elapsed.TotalSeconds:0.0} s, {left:0.0} y from the target"
                         : $"{Plugin.Tag} vnavmesh never started moving ({left:0.0} y from the target): no path found?");
@@ -1731,6 +1742,48 @@ internal sealed unsafe class Travel : IDisposable
     }
 
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
+
+    // ---------------- Dev-build test probe (read only; see TestProbe.cs) ----------------
+
+    private string _testRoute = "", _testMarker = "", _testLast = "";
+    private float _testLastLeft = -1;
+    private int _testTrips;
+
+    /// <summary>
+    /// One line for the tests: what the trip is doing now, e.g.
+    /// "trip=on; phase=moving; move=flying; route=direct; dest=957@(230,520); left=84; ...". No names.
+    /// </summary>
+    internal string TestState()
+    {
+        static string Code(string s) => System.Text.RegularExpressions.Regex.Replace(s.ToLowerInvariant(), "[^a-z0-9+]+", "-").Trim('-');
+        var c = Plugin.Condition;
+        var player = Plugin.ObjectTable.LocalPlayer;
+        var zone = Plugin.ClientState.TerritoryType;
+        var mounted = Mounted();
+        var tail = $"trips={_testTrips}; last={(_testLast.Length > 0 ? Code(_testLast) : "none")}"
+                   + (_testLastLeft >= 0 ? $"; lastleft={_testLastLeft:0}" : "")
+                   + $"; zone={zone}; mounted={(mounted ? 1 : 0)}; inflight={(c[ConditionFlag.InFlight] ? 1 : 0)}";
+        if (_phase == Phase.None)
+            return $"trip=off; phase=idle; {tail}";
+
+        var phase = _phase switch
+        {
+            Phase.Arriving => _arrival != null ? "teleporting" : "starting",
+            Phase.WaitMesh => "waitmesh",
+            _ => "moving",
+        };
+        var move = _phase != Phase.Moving ? "-"
+                 : c[ConditionFlag.InFlight] ? "flying"
+                 : mounted ? (_pathFly && !_tookOff ? "takeoff" : "riding")
+                 : MountComing() ? "mounting"
+                 : "walking";
+        var left = player != null ? Vector2.Distance(Flat(player.Position), _target) : -1f;
+        var quest = _testMarker.Length == 0 ? "none" : _testMarker == "flag" ? "flag" : "marker";
+        return $"trip=on; phase={phase}; move={move}; route={_testRoute}; dest={_finalTerritory}@({_target.X:0},{_target.Y:0}); left={left:0}"
+               + $"; path={(_pathTask != null ? "computing" : _heldPath != null ? "held" : "ready")}; fly={(_pathFly ? 1 : 0)}; wantmount={(_wantMount ? 1 : 0)}"
+               + $"; tookoff={(_tookOff ? 1 : 0)}; jumps={_jumpPresses}; target={quest}; approached={(_approached ? 1 : 0)}"
+               + $"; t={_tripTime.Elapsed.TotalSeconds:0}; est={_tripEstimate:0}; stuck={_stuckStage}; {tail}";
+    }
 
     private const uint MountRouletteAction = 9;
 

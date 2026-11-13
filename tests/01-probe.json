@@ -1,0 +1,12 @@
+{
+  "name": "Beeline: the test probe answers, and /beeline stop does nothing when idle",
+  "steps": [
+    { "waitFor": "probe:Beeline:^trip=(on|off); phase=", "timeout": 3000, "msg": "Beeline.TestState should answer (dev build loaded?)" },
+    { "cmd": "/beeline stop" },
+    { "waitFor": "probe:Beeline:^trip=off; phase=idle; trips=\\d+; last=", "timeout": 3000, "msg": "no trip should be running" },
+    { "assert": "probe:Beeline:zone=\\d+; mounted=[01]; inflight=[01]$", "msg": "the probe line should end with zone / mounted / inflight" },
+    { "wait": 500 },
+    { "assert": "!event:\\[Beeline\\] Trip ", "msg": "stop with no trip must not end anything" },
+    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+  ]
+}

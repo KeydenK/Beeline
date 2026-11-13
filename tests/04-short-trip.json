@@ -1,0 +1,25 @@
+{
+  "name": "Beeline: short same-zone trip to the flag and back (Yedlihmad, Thavnair)",
+  "steps": [
+    { "assert": "zone:957 && near:196,628,30 && !mounted", "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair (see tests/README.md)" },
+    { "cmd": "/beeline stop" },
+    { "mark": "out: about 40 y north-west" },
+    { "do": "flag 175 595" },
+    { "cmd": "/beeline testflag" },
+    { "waitFor": "probe:Beeline:^trip=on", "timeout": 3000, "msg": "the trip should start" },
+    { "assert": "probe:Beeline:route=direct; dest=957@\\(175,595\\)", "msg": "same zone, short: go directly (no paid teleport) to the flag" },
+    { "waitFor": "probe:Beeline:phase=moving", "timeout": 15000, "msg": "vnavmesh should be ready and the move start" },
+    { "waitFor": "probe:Beeline:^trip=off", "timeout": 60000, "msg": "the trip should end" },
+    { "assert": "probe:Beeline:last=arrived", "msg": "it should end by arriving" },
+    { "assert": "near:175,595,10", "msg": "you should be at the flag" },
+    { "mark": "back to the aetheryte" },
+    { "do": "flag 190 615" },
+    { "cmd": "/beeline testflag" },
+    { "waitFor": "probe:Beeline:^trip=on", "timeout": 3000, "msg": "the return trip should start" },
+    { "waitFor": "probe:Beeline:^trip=off", "timeout": 60000, "msg": "the return trip should end" },
+    { "assert": "probe:Beeline:last=arrived", "msg": "it should end by arriving" },
+    { "assert": "near:190,615,10", "msg": "you should be back at the aetheryte" },
+    { "assert": "!anomaly:WOBBLE|STUCK|SNAP", "msg": "no wobble, stuck or position snap during the trips" },
+    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+  ]
+}
