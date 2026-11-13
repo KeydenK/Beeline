@@ -27,6 +27,37 @@ internal static unsafe class QuestMarkers
     /// ground on a zoomed-out map.</param>
     /// <param name="cursorReliable">The cursor position was computed (mouse / crosshair), not the game's readout that can be
     /// stale: then a name in the tooltip only counts for a marker near the cursor (the tooltip itself can linger).</param>
+    /// <summary>
+    /// The quest area (circle) that contains this spot in this zone, if any (the smallest one): for a quest icon taken
+    /// from the map's own icons, which don't belong to the quest's marker data.
+    /// </summary>
+    public static (Vector2 Center, float Radius)? FindArea(uint territory, Vector2 spot)
+    {
+        var map = GameMap.Instance();
+        if (map == null)
+            return null;
+        (Vector2 Center, float Radius)? best = null;
+        void Consider(MarkerInfo* info)
+        {
+            if (info == null)
+                return;
+            foreach (var d in info->MarkerData.AsSpan())
+            {
+                if (d.Radius <= MinIconWithin || d.TerritoryTypeId != territory)
+                    continue;
+                var c = new Vector2(d.Position.X, d.Position.Z);
+                if (Vector2.Distance(c, spot) <= d.Radius && (best == null || d.Radius < best.Value.Radius))
+                    best = (c, d.Radius);
+            }
+        }
+        foreach (ref var m in map->QuestMarkers)
+            Consider((MarkerInfo*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m));
+        foreach (ref var m in map->LevequestMarkers)
+            Consider((MarkerInfo*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m));
+        Consider(&map->ActiveLevequestMarker);
+        return best;
+    }
+
     public static MarkerHit? Find(uint territory, uint mapId, Vector2 cursor, string tooltip, float iconWithin, bool cursorReliable = false)
     {
         var IconWithin = MathF.Max(MinIconWithin, iconWithin);

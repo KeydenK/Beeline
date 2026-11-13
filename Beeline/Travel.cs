@@ -39,6 +39,10 @@ internal sealed unsafe class Travel : IDisposable
     private float _radius;         // quest area radius (0 = a single spot)
     private bool _approached;      // already walked up to that NPC/object
     private Vector2 _areaCenter;   // the quest's area (circle), when known: searches stay inside it
+    private string _pressTooltip = "";
+    private uint _pressMapId;
+    private float _pressIconWithin;
+    private bool _refined;         // the marker is exact already, or was looked up again in its zone
     private float _areaRadius;
     private uint _finalTerritory;  // zone of the destination (_territory is the zone of the current step)
     private uint _pendingShard;    // aethernet hop still to take after the teleport (0 = none)
@@ -147,11 +151,16 @@ internal sealed unsafe class Travel : IDisposable
         _targetY    = marker is { HasHeight: true } withHeight ? withHeight.Position.Y : null;
         _dataId     = marker?.DataId ?? 0;
         _radius     = marker?.Radius ?? 0;
+        _pressTooltip = tooltip;
+        _pressMapId   = mapId;
+        _pressIconWithin = iconWithin;
+        _refined      = marker is { HasHeight: true, DataId: not 0 };
         // The quest's area (circle): the marker itself if it is one, else the area its icon belongs to (if any).
         (_areaCenter, _areaRadius) = marker switch
         {
             { Radius: > OnMarkerWithin + 1 } m => (new Vector2(m.Position.X, m.Position.Z), m.Radius),
             { AreaCenter: { } c } m => (c, m.AreaRadius),
+            not null when QuestMarkers.FindArea(territory, target) is { } a => (a.Center, a.Radius),
             _ => (Vector2.Zero, 0f),
         };
         _approached = false;
@@ -1058,6 +1067,7 @@ internal sealed unsafe class Travel : IDisposable
                 if (!ready) return;
 
                 var here = Plugin.ClientState.TerritoryType;
+                RefineMarker(here);
                 // Far away: summon a mount (on the way, or right here before taking off).
                 var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.RidingPillion] && !c[ConditionFlag.InCombat] && CanMount(here)
                                 && MountIsFaster(Vector2.Distance(Flat(player!.Position), _target), here);
@@ -1068,8 +1078,9 @@ internal sealed unsafe class Travel : IDisposable
                 if (FindMarkerObject() is { } obj)
                 {
                     _approached = true;
-                    Plugin.Info($"{Plugin.Tag} Moving to {obj.Name} at {obj.Position} ({(fly ? "flying" : "on foot/mount")})");
-                    StartMoving(player!, obj.Position, StopDistance(obj), fly, wantMount);
+                    var (spot, stop) = Approach(player!, obj, fly);
+                    Plugin.Info($"{Plugin.Tag} Moving to {obj.Name} at {spot} ({(fly ? "flying" : "on foot/mount")})");
+                    StartMoving(player!, spot, stop, fly, wantMount);
                     try { SendMove(fly); }
                     catch { Cancel("failed: vnavmesh is not available"); return; }
                     SetPhase(Phase.Moving);
@@ -1291,11 +1302,9 @@ internal sealed unsafe class Travel : IDisposable
                     if (QuestObjectInArea() is { } early)
                     {
                         _approached = true;
-                        var range = StopDistance(early);
-                        Plugin.Info($"{Plugin.Tag} Found {Plugin.Redact(early.Name.TextValue)} on the way: heading to {range:0} y from it");
-                        _dest = early.Position;
-                        _destRange = range;
                         _flying = c[ConditionFlag.InFlight];
+                        (_dest, _destRange) = Approach(player, early, _flying);
+                        Plugin.Info($"{Plugin.Tag} Found {Plugin.Redact(early.Name.TextValue)} on the way: heading to {_dest}");
                         try { SendMove(_flying); } catch { /* vnavmesh gone */ }
                         _navStarted = false;
                         SetPhase(Phase.Moving);
@@ -1317,9 +1326,8 @@ internal sealed unsafe class Travel : IDisposable
                         {
                             _approached = true;
                             Plugin.Info($"{Plugin.Tag} {obj.Name} is loaded now: moving to {range:0} y from it");
-                            _dest = obj.Position;
-                            _destRange = range;
                             _flying = c[ConditionFlag.InFlight];
+                            (_dest, _destRange) = Approach(player, obj, _flying);
                             try { SendMove(_flying); } catch { /* vnavmesh gone */ }
                             _navStarted = false;
                             SetPhase(Phase.Moving);
@@ -1422,6 +1430,60 @@ internal sealed unsafe class Travel : IDisposable
             if (score < bestScore) { bestScore = score; best = o; }
         }
         return best;
+    }
+
+    /// <summary>
+    /// Where to go for an NPC/object/mob, and how close to stop. Flying to an NPC or object: a spot on the ground on
+    /// your side of it, a little inside talking distance (NPCs ~6 y, objects ~4.5, plus their size), flown to directly;
+    /// otherwise the thing itself, stopping at <see cref="StopDistance"/>.
+    /// </summary>
+    private (Vector3 Spot, float Stop) Approach(Dalamud.Game.ClientState.Objects.Types.IGameObject player,
+                                                Dalamud.Game.ClientState.Objects.Types.IGameObject obj, bool flying)
+    {
+        if (!flying || obj is Dalamud.Game.ClientState.Objects.Types.IBattleNpc)
+            return (obj.Position, StopDistance(obj));
+        var talk = obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc ? 4f : 2.5f;
+        var away = Flat(player.Position) - Flat(obj.Position);
+        var dir = away.Length() > 0.1f ? Vector2.Normalize(away) : new Vector2(1, 0);
+        var dist = obj.HitboxRadius + talk;
+        var x = obj.Position.X + dir.X * dist;
+        var z = obj.Position.Z + dir.Y * dist;
+        try
+        {
+            if (_p.Ipc.NavGroundAt(x, z, 3f, obj.Position.Y + 5f) is { } ground && MathF.Abs(ground.Y - obj.Position.Y) < 4f)
+                return (ground, 0f);
+        }
+        catch { /* vnavmesh gone */ }
+        return (obj.Position, StopDistance(obj)); // no ground there (a ledge...): the usual way
+    }
+
+    /// <summary>
+    /// In the destination zone, look the clicked marker up again: from another map only the map's icon was known (no
+    /// height: in a layered city that picked the wrong floor), now the quest's exact marker (height, NPC, area) is.
+    /// </summary>
+    private void RefineMarker(uint here)
+    {
+        if (_refined || here != _finalTerritory || string.IsNullOrWhiteSpace(_pressTooltip))
+            return;
+        _refined = true;
+        if (QuestMarkers.Find(here, _pressMapId, _target, _pressTooltip, _pressIconWithin, cursorReliable: true) is not { } mk)
+            return;
+        var at = new Vector2(mk.Position.X, mk.Position.Z);
+        if (Vector2.Distance(at, _target) > Math.Max(30f, mk.Radius))
+            return; // something else of that name
+        Plugin.Info($"{Plugin.Tag} Marker looked up again in its zone: at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId})");
+        _target = at;
+        if (mk.HasHeight)
+            _targetY = mk.Position.Y;
+        if (mk.DataId != 0)
+            _dataId = mk.DataId;
+        _radius = mk.Radius;
+        if (mk.Radius > OnMarkerWithin + 1)
+            (_areaCenter, _areaRadius) = (at, mk.Radius);
+        else if (mk.AreaCenter is { } c)
+            (_areaCenter, _areaRadius) = (c, mk.AreaRadius);
+        else if (_areaRadius == 0 && QuestMarkers.FindArea(here, at) is { } a)
+            (_areaCenter, _areaRadius) = (a.Center, a.Radius);
     }
 
     /// <summary>Within the game's talk/use distance (NPCs ~6 yalms, objects ~4.5, plus their size).</summary>
