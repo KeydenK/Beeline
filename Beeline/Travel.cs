@@ -590,6 +590,7 @@ internal sealed unsafe class Travel : IDisposable
         _heldPath = null;
         _noFly = false;
         _noWalk = false;
+        _hasDry = false;
         _mountCastClock.Reset();
         _stuckStage = 0;
         _stuckPos = player.Position;
@@ -612,6 +613,8 @@ internal sealed unsafe class Travel : IDisposable
     private bool _flying;         // vnavmesh was asked to fly
     private bool _noFly;          // flying failed on this move (no path, can't take off, no mount): stay on the ground
     private bool _noWalk;         // no walkable ground ahead while the mount comes: stay put for this move
+    private Vector3 _lastDry;     // last spot on this move where you weren't swimming
+    private bool _hasDry;
     private bool _wantMount;      // summon a mount on the way
     private bool _sawFlying, _sawMounted;
     private int _mountAttempts;   // calls refused by the game (e.g. just after an instant action)
@@ -1198,6 +1201,28 @@ internal sealed unsafe class Travel : IDisposable
                     _wasInFlight = inFlight;
                     _sawMounted |= mounted;
                     _sawFlying |= inFlight;
+
+                    // The few steps while the mount comes ended up swimming (an aetheryte by the water, a shallow
+                    // seabed looks like ground): a mount summoned in the water is gone at once. Back to the last dry
+                    // spot, and wait for the mount there. Wading doesn't count: only swimming loses the mount.
+                    if (!mounted)
+                    {
+                        if (c[ConditionFlag.Swimming] || c[ConditionFlag.Diving])
+                        {
+                            if (_bridging && !_bridgeFlying && !_noWalk && _hasDry)
+                            {
+                                _noWalk = true;
+                                Plugin.Info($"{Plugin.Tag} Walked into the water while the mount comes: back to dry ground");
+                                try { _p.Ipc.NavFollow([_lastDry], false); } catch { /* vnavmesh gone */ }
+                                _bridgeEnd = _lastDry;
+                            }
+                        }
+                        else
+                        {
+                            _lastDry = player.Position;
+                            _hasDry = true;
+                        }
+                    }
 
                     // Mount Roulette on the way. A summon that goes through shows as a cast at once: a press with no cast
                     // a step later was dropped (right after a loading screen, or another plugin's action at the same
