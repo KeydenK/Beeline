@@ -58,7 +58,9 @@ internal static unsafe class QuestMarkers
         return best;
     }
 
-    public static MarkerHit? Find(uint territory, uint mapId, Vector2 cursor, string tooltip, float iconWithin, bool cursorReliable = false)
+    /// <param name="preferHeight">Prefer markers that know their height (the quest's own) over the map's icons.</param>
+    public static MarkerHit? Find(uint territory, uint mapId, Vector2 cursor, string tooltip, float iconWithin, bool cursorReliable = false,
+                                  bool preferHeight = false)
     {
         var IconWithin = MathF.Max(MinIconWithin, iconWithin);
         MarkerHit? best = null;
@@ -96,7 +98,7 @@ internal static unsafe class QuestMarkers
             if (!inside && !named)
                 return;
             // Named first (nearest of that name), then icons right under the cursor, then big areas that merely contain it.
-            var score = (named ? 0 : 100000) + (radius > IconWithin ? dist + 1000 : dist);
+            var score = (named ? 0 : 100000) + (radius > IconWithin ? dist + 1000 : dist) + (preferHeight && !hasHeight ? 50000 : 0);
             if (score < bestScore)
             {
                 bestScore = score;

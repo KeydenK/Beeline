@@ -43,6 +43,8 @@ internal sealed unsafe class Travel : IDisposable
     private uint _pressMapId;
     private float _pressIconWithin;
     private bool _refined;         // the marker is exact already, or was looked up again in its zone
+    private bool _hasMarker;       // a game marker was clicked (not a plain spot)
+    private long _refineSince, _refineAt;
     private float _areaRadius;
     private uint _finalTerritory;  // zone of the destination (_territory is the zone of the current step)
     private uint _pendingShard;    // aethernet hop still to take after the teleport (0 = none)
@@ -152,6 +154,8 @@ internal sealed unsafe class Travel : IDisposable
         _dataId     = marker?.DataId ?? 0;
         _radius     = marker?.Radius ?? 0;
         _pressTooltip = tooltip;
+        _hasMarker    = marker != null;
+        _refineSince  = 0;
         _pressMapId   = mapId;
         _pressIconWithin = iconWithin;
         _refined      = marker is { HasHeight: true, DataId: not 0 };
@@ -1294,6 +1298,27 @@ internal sealed unsafe class Travel : IDisposable
                     _navStarted = true;
                 if (moving && player != null && Watchdog(player, c))
                     return;
+                // The quest's exact marker showed up after arriving (height, NPC): re-route there (the right floor).
+                if (moving && !_refined && player != null && Environment.TickCount64 >= _refineAt)
+                {
+                    _refineAt = Environment.TickCount64 + 1000;
+                    if (RefineMarker(Plugin.ClientState.TerritoryType))
+                    {
+                        _flying = c[ConditionFlag.InFlight];
+                        if (FindMarkerObject() is { } exact)
+                        {
+                            _approached = true;
+                            (_dest, _destRange) = Approach(player, exact, _flying);
+                        }
+                        else if (_targetY is { } ty && _p.Ipc.NavGroundAt(_target.X, _target.Y, 5, ty + 3) is { } g)
+                            (_dest, _destRange) = (g, 0f);
+                        Plugin.Info($"{Plugin.Tag} Re-routing to the marker's exact spot: {_dest}");
+                        try { SendMove(_flying); } catch { /* vnavmesh gone */ }
+                        _navStarted = false;
+                        SetPhase(Phase.Moving);
+                        return;
+                    }
+                }
                 // A quest marker without an object id: look for its object/NPC on the way, once a second, and head
                 // straight for it as soon as the game has loaded it (instead of going to the marker first).
                 if (moving && !_approached && _dataId == 0 && player != null && Environment.TickCount64 >= _questScanAt)
@@ -1406,7 +1431,7 @@ internal sealed unsafe class Travel : IDisposable
         // An icon without an area: only objects showing the game's quest marker, within the distance the game loads
         // objects around you.
         var area = _areaRadius > 0;
-        if (!area && _targetY == null)
+        if (!area && !_hasMarker)
             return null; // a plain spot on the map, not a quest marker
         var center = area ? _areaCenter : _target;
         var searchRadius = area ? _areaRadius : QuestIconSearch;
@@ -1461,16 +1486,28 @@ internal sealed unsafe class Travel : IDisposable
     /// In the destination zone, look the clicked marker up again: from another map only the map's icon was known (no
     /// height: in a layered city that picked the wrong floor), now the quest's exact marker (height, NPC, area) is.
     /// </summary>
-    private void RefineMarker(uint here)
+    private bool RefineMarker(uint here)
     {
         if (_refined || here != _finalTerritory || string.IsNullOrWhiteSpace(_pressTooltip))
-            return;
-        _refined = true;
-        if (QuestMarkers.Find(here, _pressMapId, _target, _pressTooltip, _pressIconWithin, cursorReliable: true) is not { } mk)
-            return;
+            return false;
+        // Right after arriving the quest's own markers may not be loaded yet: try again (once a second, on the way) for
+        // up to 15 s, then make do with the icon.
+        var now = Environment.TickCount64;
+        if (_refineSince == 0)
+            _refineSince = now;
+        if (now - _refineSince > 15000)
+        {
+            _refined = true;
+            return false;
+        }
+        if (QuestMarkers.Find(here, _pressMapId, _target, _pressTooltip, _pressIconWithin, cursorReliable: true, preferHeight: true) is not { } mk)
+            return false;
         var at = new Vector2(mk.Position.X, mk.Position.Z);
         if (Vector2.Distance(at, _target) > Math.Max(30f, mk.Radius))
-            return; // something else of that name
+            return false; // something else of that name
+        if (!mk.HasHeight && mk.DataId == 0)
+            return false; // still only the map's icon
+        _refined = true;
         Plugin.Info($"{Plugin.Tag} Marker looked up again in its zone: at {mk.Position} (radius {mk.Radius:0}, object {mk.DataId})");
         _target = at;
         if (mk.HasHeight)
@@ -1484,6 +1521,7 @@ internal sealed unsafe class Travel : IDisposable
             (_areaCenter, _areaRadius) = (c, mk.AreaRadius);
         else if (_areaRadius == 0 && QuestMarkers.FindArea(here, at) is { } a)
             (_areaCenter, _areaRadius) = (a.Center, a.Radius);
+        return true;
     }
 
     /// <summary>Within the game's talk/use distance (NPCs ~6 yalms, objects ~4.5, plus their size).</summary>
@@ -1496,16 +1534,17 @@ internal sealed unsafe class Travel : IDisposable
     /// <summary>Marker without an NPC/object id: the friendly NPC or object standing right on the marker.</summary>
     private Dalamud.Game.ClientState.Objects.Types.IGameObject? ObjectOnMarker()
     {
-        if (_targetY == null || _radius > OnMarkerWithin + 1)
+        if (!_hasMarker || _radius > OnMarkerWithin + 1)
             return null; // not a game marker, or an area
-        var marker = new Vector3(_target.X, _targetY.Value, _target.Y);
+        var flatOnly = _targetY == null; // a map icon: no height known, compare on the map
+        var marker = new Vector3(_target.X, _targetY ?? 0, _target.Y);
         Dalamud.Game.ClientState.Objects.Types.IGameObject? best = null;
         var bestDist = OnMarkerWithin;
         foreach (var o in Plugin.ObjectTable)
         {
             if (!IsFriendlyInteractable(o))
                 continue;
-            var d = Vector3.Distance(o.Position, marker);
+            var d = flatOnly ? Vector2.Distance(Flat(o.Position), _target) : Vector3.Distance(o.Position, marker);
             if (d < bestDist)
             {
                 bestDist = d;
