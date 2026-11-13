@@ -186,7 +186,6 @@ internal sealed unsafe class Travel : IDisposable
         }
 
         _navStarted = false;
-        _justHopped = false;
         _hop = r.FirstHop;
         _hopTime.Restart();
         _tripTime.Restart();
@@ -571,16 +570,8 @@ internal sealed unsafe class Travel : IDisposable
                 _timingsChanged = true; // saved once, when the trip ends
                 break;
         }
-        _justHopped = _hop != Hop.None;
         _hop = Hop.None;
     }
-
-    /// <summary>
-    /// The next leg starts where a teleport or aethernet hop left you: no walking while the mount comes there
-    /// (aetherytes often stand by water, and a shallow seabed can't be told from the shore; you take off right
-    /// there anyway).
-    /// </summary>
-    private bool _justHopped;
 
     private void StartMoving(Dalamud.Game.ClientState.Objects.Types.IGameObject player, Vector3 dest, float range, bool fly, bool wantMount)
     {
@@ -598,8 +589,7 @@ internal sealed unsafe class Travel : IDisposable
         _allowRemount = false;
         _heldPath = null;
         _noFly = false;
-        _noWalk = _justHopped; // right after a teleport/aethernet hop: wait for the mount where you stand
-        _justHopped = false;
+        _noWalk = false;
         _mountCastClock.Reset();
         _stuckStage = 0;
         _stuckPos = player.Position;
