@@ -106,8 +106,8 @@ internal sealed unsafe class ConfigWindow : Window
 
     private void DrawControls()
     {
-        Hint("Open the map, point at something and press: on an aetheryte or a shard you go there, anywhere else Beeline "
-           + "takes you there the quickest way. Moving your character stops the trip.");
+        Hint("Open the map, point at something and press: on a shard you go there, on an aetheryte the game teleports you "
+           + "itself, anywhere else Beeline takes you there the quickest way. Moving your character stops the trip.");
         ImGuiHelpers.ScaledDummy(2);
 
         // Controller

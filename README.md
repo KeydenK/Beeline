@@ -22,7 +22,8 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
 ## Features
 
 - **One button, everything on the map:**
-  - **On an aetheryte or an aethernet shard:** you go there. If you're on that city's aethernet, the aethernet is used (it's free); otherwise you teleport, and take the aethernet from there if the shard needs it.
+  - **On an aethernet shard:** you go there. If you're on that city's aethernet, the aethernet is used (it's free); otherwise you teleport, and take the aethernet from there.
+  - **On a main aetheryte:** the game itself teleports you there (as it always does on a click), so Beeline stays out of the way.
   - **Anywhere else, in any zone:** Beeline compares going there directly, taking the aethernet, and teleporting to the aetheryte (or shard) closest to the spot, and picks the quickest. Then it:
     - summons a mount on the way when that's faster than staying on foot (your favourite mount or a roulette, while you keep moving),
     - flies if you have the zone's aether currents,
@@ -167,6 +168,9 @@ A plain left click is already used by the map (an aetheryte opens the game's tel
 
 **Does it cost gil?**
 Teleports cost the usual gil, like teleporting yourself. The aethernet is free.
+
+**Why don't I see "Cannot execute at this time." when taking off?**
+While a trip takes off, vnavmesh presses Jump until you're in the air and the game refuses most of those presses; another plugin's action during the mount summon can also get "Unable to use. You are currently using another item.". Beeline hides just these two messages, only during a trip and only for a few seconds around the mount summon, the take-off and touch-downs. Everything else still shows.
 
 **It teleported even though I could have walked.**
 Beeline estimates the time of each route and picks the shortest one. A teleport takes a while (the cast plus the loading screen), but if the aetheryte is much closer to the spot than you are, it still wins. The estimates come from your own trips: Beeline times your teleports and aethernet hops (a fast PC loads quicker) and measures how fast you actually get somewhere on foot, riding and flying, so its choices get better as you use it. You can see these numbers in **Advanced → Route timing**.
