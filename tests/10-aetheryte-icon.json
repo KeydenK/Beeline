@@ -1,0 +1,31 @@
+{
+  "name": "Beeline: a press on a main aetheryte icon is left to the game's own teleport (and back the same way)",
+  "steps": [
+    { "assert": "zone:957 && near:196,628,30 && !mounted", "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair. Costs two teleport fees (~70 gil each)." },
+    { "cmd": "/beeline stop" },
+    { "do": "flag 600 -300" },
+    { "do": "map" },
+    { "waitFor": "window:AreaMap", "timeout": 2000, "msg": "the map should open" },
+    { "wait": 800 },
+    { "do": "mapzoom out" },
+    { "wait": 400 },
+    { "mark": "Ctrl+click on Palaka's Stand's aetheryte icon (world 404, -247)" },
+    { "do": "mapclick 404 -247 Left ctrl" },
+    { "waitFor": "event:\\[Beeline\\] On an aetheryte \\(Palaka's Stand\\): leaving it to the game's teleport", "timeout": 5000, "msg": "Beeline should leave the aetheryte to the game" },
+    { "assert": "probe:Beeline:^trip=off", "msg": "Beeline must not start a trip of its own" },
+    { "waitFor": "cond:BetweenAreas", "timeout": 15000, "msg": "the game's own teleport should happen" },
+    { "waitFor": "!cond:BetweenAreas && near:404,-247,30", "timeout": 20000, "msg": "you should arrive at Palaka's Stand" },
+    { "assert": "probe:Beeline:^trip=off", "msg": "still no Beeline trip" },
+    { "mark": "back: Ctrl+click on the Yedlihmad aetheryte icon (196, 628)" },
+    { "do": "map" },
+    { "waitFor": "window:AreaMap", "timeout": 2000 },
+    { "wait": 800 },
+    { "do": "mapzoom out" },
+    { "wait": 400 },
+    { "do": "mapclick 196 628 Left ctrl" },
+    { "waitFor": "event:\\[Beeline\\] On an aetheryte \\(Yedlihmad\\): leaving it to the game's teleport", "timeout": 5000 },
+    { "waitFor": "cond:BetweenAreas", "timeout": 15000, "msg": "the game should teleport you back" },
+    { "waitFor": "!cond:BetweenAreas && near:196,628,30", "timeout": 20000, "msg": "you should be back at Yedlihmad" },
+    { "assert": "!event:\\[ERR\\] \\[Beeline\\]", "msg": "no errors from Beeline" }
+  ]
+}

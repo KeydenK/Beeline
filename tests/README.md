@@ -61,7 +61,8 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
   `flying` · `riding` · `walking`.
 - `route`: `direct` · `teleport` · `aethernet` · `teleport+aethernet`. `dest`: territory@(world X,Z) of the
   destination; `left`: yalms (flat) still to go; `t` / `est`: seconds since the trip started / the route's estimate.
-- `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `stuck`: Beeline's own stuck
+- `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `walkafter=1`: flying to the open ground next to a covered spot
+  (roof, arch, overhang), the last stretch on foot follows. `nofly=1`: this move stays on the ground. `stuck`: Beeline's own stuck
   watchdog stage (0 = fine).
 - `target`: what the press picked: `flag` · `marker` (quest/map marker) · `none` (a plain spot). `approached`: it
   went for the marker's NPC/object.
@@ -82,8 +83,9 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
 | 07-cancel-by-moving | Pushing the left stick mid-trip cancels it (`last=cancelled-you-moved`, log line), then returns. WOBBLE isn't checked (you take over). | Test spot. |
 | 08-new-trip-replaces | A new destination mid-trip replaces the trip (log "Trip replaced", probe `dest` changes) and arrives there. WOBBLE isn't checked (turning back is intended). | Test spot. |
 | 09-controller-press | Crosshair steered onto a spot ~110 y away with the right stick, then Cross: "Controller on map", position from the crosshair, trip there; back by Ctrl+click. | Test spot, on foot, flying unlocked. |
+| 10-aetheryte-icon | Ctrl+click on Palaka's Stand's aetheryte icon: Beeline logs "leaving it to the game's teleport", starts no trip, the game teleports you; back to Yedlihmad the same way. Costs two teleport fees. | Test spot, on foot. |
 
-Costs: 04-08 should never pay for a teleport (all trips are short, same zone, `route=direct` is asserted). If
+Costs: 04-09 should never pay for a teleport (10 pays two on purpose) (all trips are short, same zone, `route=direct` is asserted). If
 Beeline ever picks a teleport there, the assert fails, but the teleport still happens and costs gil.
 
 ## Manual only (not automated)
