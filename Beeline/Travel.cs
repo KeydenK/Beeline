@@ -690,6 +690,7 @@ internal sealed unsafe class Travel : IDisposable
     private bool _sprintUsed;             // Sprint only once per move (long cooldown); Peloton is re-applied
     private bool _sawSprint, _sawPeloton; // boosts seen during this move (for learning the right speed)
     private readonly System.Diagnostics.Stopwatch _sprintClock = new(); // since Sprint was used
+    private readonly System.Diagnostics.Stopwatch _sprintReadyClock = new(), _sprintGoneClock = new(); // Giddy Up's Sprint: ready / used since
 
     private const uint PelotonAction = 7557, SprintGeneralAction = 4, JumpGeneralAction = 2;
     private const uint SprintStatus = 50, PelotonStatus = 1199;
@@ -1204,6 +1205,15 @@ internal sealed unsafe class Travel : IDisposable
                     // (Peloton then takes over the moment Sprint ends), nor right after using Sprint (its effect takes
                     // a moment to show up: Peloton would otherwise be cast on top of it).
                     var sprintPending = _sprintUsed && !hasSprint && _sprintClock.ElapsedMilliseconds < 2000;
+                    // Giddy Up uses Sprint: one it's about to use (ready for under 3 s) or just used (on cooldown for
+                    // under 2 s, effect not showing yet) would end up under a Peloton put on now.
+                    if (_guSprint && !hasSprint && !mounted)
+                    {
+                        if (SprintReady()) { _sprintGoneClock.Reset(); if (!_sprintReadyClock.IsRunning) _sprintReadyClock.Restart(); }
+                        else { _sprintReadyClock.Reset(); if (!_sprintGoneClock.IsRunning) _sprintGoneClock.Restart(); }
+                        sprintPending |= _sprintReadyClock.IsRunning ? _sprintReadyClock.ElapsedMilliseconds < 3000
+                                                                    : _sprintGoneClock.ElapsedMilliseconds < 2000;
+                    }
                     if (Config.SpeedBuffs && !(_guSprint && _guPeloton) && !mounted && !_wantMount && !mountingNow && (!hasSprint || sprintLeft <= 2f) && !sprintPending
                         && !hasJog && _boostFails < 20
                         && Vector2.Distance(Flat(player.Position), Flat(_dest)) > 20)
