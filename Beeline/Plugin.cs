@@ -442,7 +442,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
         var focused = RaptureAtkUnitManager.Instance()->AtkUnitManager.FocusedAddon;
         if (padPressed && (focused != &map->AtkUnitBase || CrosshairPoint(map) == null))
         {
-            Info($"{Tag} Button ignored: the map isn't focused ({(focused == null ? "the game has it" : $"\"{focused->NameString}\" has it")})");
+            Info(focused == &map->AtkUnitBase
+                ? $"{Tag} Button ignored: the map's crosshair isn't showing (the map is in mouse mode; move its cursor with the stick first)"
+                : $"{Tag} Button ignored: the map isn't focused ({(focused == null ? "the game has it" : $"\"{focused->NameString}\" has it")})");
             return;
         }
 
