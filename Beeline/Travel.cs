@@ -56,7 +56,42 @@ internal sealed unsafe class Travel : IDisposable
     private int _mountTries;
     private const int StepIntervalMs = 100;
 
-    public Travel(Plugin p) => _p = p;
+    public Travel(Plugin p)
+    {
+        _p = p;
+        Plugin.Toasts.ErrorToast += OnErrorToast;
+    }
+
+    // ---------------- vnavmesh's refused Jump presses: hide their "Cannot execute at this time." ----------------
+
+    /// <summary>
+    /// Taking off and on a flying route, vnavmesh presses Jump every few frames until you're in the air; the game refuses
+    /// most of them and shows "Cannot execute at this time." each time. During a trip, for a moment after each moment
+    /// that happens (a flying move starts, you lift off or touch down), that one message is hidden. Nothing else is.
+    /// </summary>
+    private long _muteJumpToastsUntil;
+    private bool _toldMuted;
+    private string? _cannotExecute;
+
+    private void MuteJumpToasts(int ms)
+        => _muteJumpToastsUntil = Math.Max(_muteJumpToastsUntil, Environment.TickCount64 + ms);
+
+    private void OnErrorToast(ref Dalamud.Game.Text.SeStringHandling.SeString message, ref bool isHandled)
+    {
+        if (isHandled || _phase == Phase.None || Environment.TickCount64 > _muteJumpToastsUntil)
+            return;
+        // The game's own text for it (log message 579), in the client's language.
+        _cannotExecute ??= Plugin.Data.GetExcelSheet<Lumina.Excel.Sheets.LogMessage>().TryGetRow(579, out var row)
+            ? row.Text.ExtractText() : "Cannot execute at this time.";
+        if (message.TextValue != _cannotExecute)
+            return;
+        isHandled = true;
+        if (!_toldMuted)
+        {
+            _toldMuted = true;
+            Plugin.Info($"{Plugin.Tag} Hiding vnavmesh's refused Jump messages while taking off");
+        }
+    }
 
     private Configuration Config => _p.Config;
     public bool IsActive => _phase != Phase.None;
@@ -83,6 +118,7 @@ internal sealed unsafe class Travel : IDisposable
 
     public void Dispose()
     {
+        Plugin.Toasts.ErrorToast -= OnErrorToast;
         if (_phase != Phase.None)
             try { _p.Ipc.NavStop(); } catch { /* vnavmesh missing */ }
         Stop();
@@ -248,6 +284,8 @@ internal sealed unsafe class Travel : IDisposable
 
     private void Stop()
     {
+        _toldMuted = false;
+        _muteJumpToastsUntil = 0;
         HideTimer();
         var wasActive = _phase != Phase.None;
         if (wasActive)
@@ -745,6 +783,8 @@ internal sealed unsafe class Travel : IDisposable
         _pathFrom = player.Position;
         _pathTask = _p.Ipc.NavPathfind(player.Position, _dest, fly, _destRange);
         _bridging = _bridgeFlying = false;
+        if (fly)
+            MuteJumpToasts(5000); // the take-off (vnavmesh's Jump presses) is about to happen
         if (fly && bridge)
             Bridge(player);
     }
@@ -1262,6 +1302,8 @@ internal sealed unsafe class Travel : IDisposable
                     }
                     if (inFlight && !_wasInFlight)
                         Plugin.Info($"{Plugin.Tag} Took off {_moveTime.Elapsed.TotalSeconds:0.0} s into the move");
+                    if (inFlight != _wasInFlight && _pathFly)
+                        MuteJumpToasts(2500); // lifting off / touching down: vnavmesh's Jump presses come right then
                     _wasMounted = mounted;
                     _wasInFlight = inFlight;
                     _sawMounted |= mounted;
