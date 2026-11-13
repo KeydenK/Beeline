@@ -59,37 +59,34 @@ internal sealed unsafe class Travel : IDisposable
     public Travel(Plugin p)
     {
         _p = p;
-        Plugin.Toasts.ErrorToast += OnErrorToast;
+        Plugin.Chat.LogMessage += OnLogMessage;
     }
 
-    // ---------------- vnavmesh's refused Jump presses: hide their "Cannot execute at this time." ----------------
+    // ---------------- Error messages that only come from the take-off: hidden for a moment ----------------
 
     /// <summary>
-    /// Taking off and on a flying route, vnavmesh presses Jump every few frames until you're in the air; the game refuses
-    /// most of them and shows "Cannot execute at this time." each time. During a trip, for a moment after each moment
-    /// that happens (a flying move starts, you lift off or touch down), that one message is hidden. Nothing else is.
+    /// Taking off and on a flying route, vnavmesh presses Jump every few frames until you're in the air, and the game
+    /// refuses most of them ("Cannot execute at this time."); while the mount is being summoned, another plugin's
+    /// action gets "Unable to use. You are currently using another item.". During a trip, for a few seconds around
+    /// those moments (the mount summon, a flying move starting, lifting off or touching down), these game messages
+    /// (by number, any language) are blocked: no error text on screen, no red line in the chat. Nothing else is.
     /// </summary>
+    private static readonly HashSet<uint> TakeOffNoise = [579, 7785, 7800, 1262];
     private long _muteJumpToastsUntil;
     private bool _toldMuted;
-    private string? _cannotExecute;
 
     private void MuteJumpToasts(int ms)
         => _muteJumpToastsUntil = Math.Max(_muteJumpToastsUntil, Environment.TickCount64 + ms);
 
-    private void OnErrorToast(ref Dalamud.Game.Text.SeStringHandling.SeString message, ref bool isHandled)
+    private void OnLogMessage(Dalamud.Game.Chat.ILogMessage message)
     {
-        if (isHandled || _phase == Phase.None || Environment.TickCount64 > _muteJumpToastsUntil)
+        if (_phase == Phase.None || Environment.TickCount64 > _muteJumpToastsUntil || !TakeOffNoise.Contains(message.LogMessageId))
             return;
-        // The game's own text for it (log message 579), in the client's language.
-        _cannotExecute ??= Plugin.Data.GetExcelSheet<Lumina.Excel.Sheets.LogMessage>().TryGetRow(579, out var row)
-            ? row.Text.ExtractText() : "Cannot execute at this time.";
-        if (message.TextValue != _cannotExecute)
-            return;
-        isHandled = true;
+        message.PreventOriginal();
         if (!_toldMuted)
         {
             _toldMuted = true;
-            Plugin.Info($"{Plugin.Tag} Hiding vnavmesh's refused Jump messages while taking off");
+            Plugin.Info($"{Plugin.Tag} Hiding the take-off's refused-action messages");
         }
     }
 
@@ -118,7 +115,7 @@ internal sealed unsafe class Travel : IDisposable
 
     public void Dispose()
     {
-        Plugin.Toasts.ErrorToast -= OnErrorToast;
+        Plugin.Chat.LogMessage -= OnLogMessage;
         if (_phase != Phase.None)
             try { _p.Ipc.NavStop(); } catch { /* vnavmesh missing */ }
         Stop();
@@ -1272,6 +1269,7 @@ internal sealed unsafe class Travel : IDisposable
                     {
                         if (SummonMount())
                         {
+                            MuteJumpToasts(4000); // the cast: another plugin's action during it gets "using another item"
                             _mountTries++;
                             _allowRemount = false;
                             _mountCastClock.Restart();
