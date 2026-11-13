@@ -621,9 +621,6 @@ internal sealed unsafe class Travel : IDisposable
         _sawFlying = fly;
         _tookOff = Plugin.Condition[ConditionFlag.InFlight];
         _jumpPresses = 0;
-        _lastPressInAir = false;
-        _mountedAt = 0;
-        _inFlightSince = 0;
         _sawMounted = Plugin.Condition[ConditionFlag.Mounted];
     }
 
@@ -779,10 +776,7 @@ internal sealed unsafe class Travel : IDisposable
         var pos = player.Position;
         if (mounted && !MountSettled())
             return; // getting on the mount: don't jump yet, keep the current little walk
-        // Mounted but not in the air yet: Beeline takes off itself (TakeOff). A flying move given to vnavmesh on the
-        // ground makes it spam Jump, so meanwhile keep going on the ground (below): no stop while the jumps happen.
-        var takingOff = mounted && !Plugin.Condition[ConditionFlag.InFlight] && !TakeOffGaveUp();
-        if (mounted && !takingOff)
+        if (mounted)
         {
             // Take off and head up and toward the target, far enough to keep going until the path is ready.
             var step = Math.Min(Math.Clamp(Config.FlySpeed * 2.5f, 30f, 150f), to.Length());
@@ -867,12 +861,10 @@ internal sealed unsafe class Travel : IDisposable
         _pathTask = null;
         if (!task.IsCompletedSuccessfully || task.Result is not { Count: > 0 } points)
             return false;
-        if (_pathFly && !Plugin.Condition[ConditionFlag.InFlight] && (MountComing() || Mounted()) && !TakeOffGaveUp())
+        if (_pathFly && !Plugin.Condition[ConditionFlag.InFlight] && !MountSettled() && (MountComing() || Mounted()))
         {
-            // Not in the air yet: Beeline takes off itself first. Handing vnavmesh a flying route on the ground makes it
-            // press Jump every few frames until you fly ("Cannot execute at this time" each time).
             _heldPath = points;
-            Plugin.Info($"{Plugin.Tag} Path ready after {_pathClock.Elapsed.TotalSeconds:0.0} s, taking off before following it");
+            Plugin.Info($"{Plugin.Tag} Path ready after {_pathClock.Elapsed.TotalSeconds:0.0} s, waiting for the mount before taking off");
             return true;
         }
         // The head-start move took you away from the planned route (it went in a straight line): rejoining it from here
@@ -891,10 +883,8 @@ internal sealed unsafe class Travel : IDisposable
         // On the mount for a flying route: its first points were planned from the ground right around you. Going to them
         // once you're taking off (at once with a single jump) means dipping back down or turning back: start at the first
         // point that's actually away from you.
-        // Never skip a nearby point well above you, though: leaving an enclosed spot (a walled camp, a courtyard), that
-        // point is the climb over the wall.
         if (_pathFly && Mounted())
-            while (next < points.Count - 1 && Vector2.Distance(Flat(points[next]), Flat(pos)) < 6f && points[next].Y - pos.Y < 3f)
+            while (next < points.Count - 1 && Vector2.Distance(Flat(points[next]), Flat(pos)) < 6f)
                 next++;
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
         // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
@@ -921,27 +911,7 @@ internal sealed unsafe class Travel : IDisposable
     }
 
     private bool _tookOff;      // this move has been in the air (no more take-off presses after that)
-
-    /// <summary>
-    /// Beeline's own take-off didn't work (6 presses, or 1.5 s since the last one without flying): hand the flying route
-    /// to vnavmesh anyway, it has its own way to get you up.
-    /// </summary>
-    private bool TakeOffGaveUp()
-        => _jumpPresses >= 6 || (_jumpPresses > 0 && Environment.TickCount64 - _jumpAt > 1500 && !Hopping(Plugin.Condition));
     private long _jumpAt;       // last Jump press by Beeline
-    private bool _lastPressInAir; // that press was the mid-air (second) one
-    private long _mountedAt;      // when you got on the mount during this move (0: already mounted at the start)
-    private long _inFlightSince;  // when you took off during this move (0: already flying at the start)
-
-    /// <summary>
-    /// Flying for 0.4 s: the take-off has lifted you clear of the ground. A route handed over the instant you take off
-    /// can dip you back onto the ground, and vnavmesh then presses Jump again and again ("Cannot execute").
-    /// </summary>
-    private bool AirborneSettled(Dalamud.Plugin.Services.ICondition c)
-        => c[ConditionFlag.InFlight] && Environment.TickCount64 - _inFlightSince >= 400;
-
-    /// <summary>In a jump. On a mount the game sets Jumping; Jumping61 is the on-foot one.</summary>
-    private static bool Hopping(Dalamud.Plugin.Services.ICondition c) => c[ConditionFlag.Jumping] || c[ConditionFlag.Jumping61];
     private int _jumpPresses;
 
     /// <summary>
@@ -958,20 +928,13 @@ internal sealed unsafe class Travel : IDisposable
         if (_tookOff || _jumpPresses >= 6)
             return;
         var now = Environment.TickCount64;
-        // Just got on the mount: it can't take off for a moment (a jump then is a plain hop and the whole double-jump
-        // is wasted, ~2 s). Wait 0.5 s after mounting.
-        if (now - _mountedAt < 500)
-            return;
-        var hopping = Hopping(c);
-        // In the air: second press after 0.2 s (double-jump take-off). After a mid-air press the take-off animation
-        // runs ~0.4 s with no jump flag: don't press into it (refused, "Cannot execute").
-        if (now - _jumpAt < (hopping ? 200 : _lastPressInAir ? 1000 : 400))
+        var hopping = c[ConditionFlag.Jumping61];
+        if (now - _jumpAt < (hopping ? 200 : 400))
             return;
         if (ActionManager.Instance()->UseAction(ActionType.GeneralAction, JumpGeneralAction))
         {
             _jumpAt = now;
             _jumpPresses++;
-            _lastPressInAir = hopping;
             Plugin.Info($"Jump to take off ({(hopping ? "second press" : "first press")})");
         }
     }
@@ -1279,14 +1242,6 @@ internal sealed unsafe class Travel : IDisposable
                     {
                         Plugin.Info($"{Plugin.Tag} {(mounted ? "Mounted" : "Dismounted")} {_moveTime.Elapsed.TotalSeconds:0.0} s into the move"
                                     + (mounted ? $" (Beeline had summoned it: {(_mountTries > 0 ? "yes" : "no")})" : ""));
-                        if (mounted)
-                        {
-                            _mountedAt = Environment.TickCount64;
-                            // The mount's appearance stops whatever little walk was going on: keep going on the ground
-                            // while Beeline takes off (no stop between getting on and lifting off).
-                            if (_pathFly && !c[ConditionFlag.InFlight] && player != null && (_pathTask != null || _heldPath != null))
-                                try { Bridge(player); } catch { /* vnavmesh gone */ }
-                        }
                         if (mounted && _mountCastClock.IsRunning)
                         {
                             var took = (float)_mountCastClock.Elapsed.TotalSeconds;
@@ -1306,19 +1261,6 @@ internal sealed unsafe class Travel : IDisposable
                         }
                     }
                     if (inFlight && !_wasInFlight)
-                    {
-                        _inFlightSince = Environment.TickCount64;
-                        // Airborne: the ground walk-ahead would pull the mount back down. Climb straight up a little until
-                        // the route takes over (straight up: forward could be a wall, e.g. leaving a walled camp).
-                        if (_pathFly && player != null && (_heldPath != null || _pathTask != null))
-                            try
-                            {
-                                _p.Ipc.NavFollow([player.Position + new Vector3(0, 6, 0)], true);
-                                _bridging = false;
-                            }
-                            catch { /* vnavmesh gone */ }
-                    }
-                    if (inFlight && !_wasInFlight)
                         Plugin.Info($"{Plugin.Tag} Took off {_moveTime.Elapsed.TotalSeconds:0.0} s into the move");
                     _wasMounted = mounted;
                     _wasInFlight = inFlight;
@@ -1332,7 +1274,7 @@ internal sealed unsafe class Travel : IDisposable
                     // after ~3 s of refusals.
                     // Never once you've been mounted on this move: Mount Roulette while mounted would dismount you.
                     if (_wantMount && !mounted && (!_sawMounted || _allowRemount) && !mountingNow && !c[ConditionFlag.InCombat]
-                        && !c[ConditionFlag.InFlight] && !Hopping(c) && _mountAttempts < 30
+                        && !c[ConditionFlag.InFlight] && !c[ConditionFlag.Jumping61] && _mountAttempts < 30
                         && (_mountTries == 0 || (_mountTries < 30 && _mountCastClock.ElapsedMilliseconds >= 90)))
                     {
                         if (SummonMount())
@@ -1450,7 +1392,7 @@ internal sealed unsafe class Travel : IDisposable
                         }
                         _phaseTime.Restart();
                     }
-                    else if (_pathFly && !_bridgeFlying && MountSettled() && (AirborneSettled(c) || TakeOffGaveUp()))
+                    else if (_pathFly && !_bridgeFlying && MountSettled())
                     {
                         try { Bridge(player); } catch { /* vnavmesh gone */ } // mounted and settled: take off while waiting
                     }
@@ -1460,7 +1402,7 @@ internal sealed unsafe class Travel : IDisposable
                     }
                 }
                 if (_heldPath != null && player != null
-                    && (AirborneSettled(c) || TakeOffGaveUp() || (!Mounted() && !MountComing())))
+                    && (MountSettled() || c[ConditionFlag.InFlight] || (!Mounted() && !MountComing())))
                 {
                     try { FollowPath(_heldPath, player); } catch { _heldPath = null; }
                     _phaseTime.Restart();
