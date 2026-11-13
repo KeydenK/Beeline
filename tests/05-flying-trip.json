@@ -2,7 +2,7 @@
   "name": "Beeline: flying trip (mount, take off, fly, land) and back (Yedlihmad, Thavnair)",
   "steps": [
     {
-      "assert": "zone:957 && near:180,640,60 && !mounted",
+      "assert": "zone:957 && near:196,628,30 && !mounted",
       "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked"
     },
     {
@@ -77,7 +77,7 @@
       "msg": "no wobble, stuck or position snap on the flight"
     },
     {
-      "mark": "back near the aetheryte"
+      "mark": "back to the aetheryte"
     },
     {
       "do": "map"
@@ -91,7 +91,7 @@
       "wait": 800
     },
     {
-      "do": "mapclick 150 650 Left ctrl"
+      "do": "mapclick 190 615 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -112,8 +112,8 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:150,650,10",
-      "msg": "you should be back near the aetheryte"
+      "assert": "near:190,615,10",
+      "msg": "you should be back to the aetheryte"
     },
     {
       "assert": "!anomaly:WOBBLE|STUCK|SNAP",

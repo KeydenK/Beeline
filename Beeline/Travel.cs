@@ -777,9 +777,10 @@ internal sealed unsafe class Travel : IDisposable
         var pos = player.Position;
         if (mounted && !MountSettled())
             return; // getting on the mount: don't jump yet, keep the current little walk
-        if (mounted && !Plugin.Condition[ConditionFlag.InFlight] && !TakeOffGaveUp())
-            return; // Beeline takes off first (TakeOff): a flying move on the ground makes vnavmesh spam Jump
-        if (mounted)
+        // Mounted but not in the air yet: Beeline takes off itself (TakeOff). A flying move given to vnavmesh on the
+        // ground makes it spam Jump, so meanwhile keep going on the ground (below): no stop while the jumps happen.
+        var takingOff = mounted && !Plugin.Condition[ConditionFlag.InFlight] && !TakeOffGaveUp();
+        if (mounted && !takingOff)
         {
             // Take off and head up and toward the target, far enough to keep going until the path is ready.
             var step = Math.Min(Math.Clamp(Config.FlySpeed * 2.5f, 30f, 150f), to.Length());
@@ -888,10 +889,15 @@ internal sealed unsafe class Travel : IDisposable
         // On the mount for a flying route: its first points were planned from the ground right around you. Going to them
         // once you're taking off (at once with a single jump) means dipping back down or turning back: start at the first
         // point that's actually away from you.
+        // Also skip points steeply above you: vnavmesh climbs to those almost straight up, hovering in place for a couple
+        // of seconds; the next point further on is reached climbing on the way.
         if (_pathFly && Mounted())
-            while (next < points.Count - 1 && Vector2.Distance(Flat(points[next]), Flat(pos)) < 6f)
+            while (next < points.Count - 1
+                   && (Vector2.Distance(Flat(points[next]), Flat(pos)) is var flat && (flat < 6f || points[next].Y - pos.Y > flat * 0.7f)))
                 next++;
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
+        if (_pathFly)
+            route = KeepClearOfGround(route);
         // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
         // End it where it first gets within the stop distance instead. Flying to an NPC or object, that end point is put
         // on the ground (else you'd stop in the air, or fly on into its face): you land at talking distance.
@@ -969,6 +975,35 @@ internal sealed unsafe class Travel : IDisposable
             _lastPressInAir = hopping;
             Plugin.Info($"Jump to take off ({(hopping ? "second press" : "first press")})");
         }
+    }
+
+    /// <summary>
+    /// Flying route points (not the last, where you land) less than 3 y above the ground are lifted to 3 y: vnavmesh's
+    /// route can skim slopes, the mount touches down, lands, and vnavmesh then presses Jump again and again. One ground
+    /// lookup per point, once per route.
+    /// </summary>
+    private List<Vector3> KeepClearOfGround(List<Vector3> route)
+    {
+        if (route.Count < 2)
+            return route;
+        var lifted = new List<Vector3>(route);
+        var count = 0;
+        for (var i = 0; i < lifted.Count - 1; i++)
+        {
+            var pt = lifted[i];
+            try
+            {
+                if (_p.Ipc.NavGroundAt(pt.X, pt.Z, 2f, pt.Y + 1f) is { } ground && pt.Y - ground.Y < 3f)
+                {
+                    lifted[i] = pt with { Y = ground.Y + 3f };
+                    count++;
+                }
+            }
+            catch { return route; } // vnavmesh gone: as it is
+        }
+        if (count > 0)
+            Plugin.Info($"{Plugin.Tag} Lifted {count} flying route point(s) skimming the ground");
+        return lifted;
     }
 
     /// <summary>The route cut where it first comes within <paramref name="range"/> of <paramref name="dest"/>.</summary>
@@ -1228,7 +1263,13 @@ internal sealed unsafe class Travel : IDisposable
                         Plugin.Info($"{Plugin.Tag} {(mounted ? "Mounted" : "Dismounted")} {_moveTime.Elapsed.TotalSeconds:0.0} s into the move"
                                     + (mounted ? $" (Beeline had summoned it: {(_mountTries > 0 ? "yes" : "no")})" : ""));
                         if (mounted)
+                        {
                             _mountedAt = Environment.TickCount64;
+                            // The mount's appearance stops whatever little walk was going on: keep going on the ground
+                            // while Beeline takes off (no stop between getting on and lifting off).
+                            if (_pathFly && !c[ConditionFlag.InFlight] && player != null && (_pathTask != null || _heldPath != null))
+                                try { Bridge(player); } catch { /* vnavmesh gone */ }
+                        }
                         if (mounted && _mountCastClock.IsRunning)
                         {
                             var took = (float)_mountCastClock.Elapsed.TotalSeconds;
@@ -1621,7 +1662,7 @@ internal sealed unsafe class Travel : IDisposable
             _refined = true;
             return false;
         }
-        if (QuestMarkers.Find(here, _pressMapId, _target, _pressTooltip, _pressIconWithin, cursorReliable: true, preferHeight: true) is not { } mk)
+        if (QuestMarkers.Find(here, _pressMapId, _target, _pressTooltip, _pressIconWithin, cursorReliable: true, preferHeight: true, quiet: true) is not { } mk)
             return false;
         var at = new Vector2(mk.Position.X, mk.Position.Z);
         if (Vector2.Distance(at, _target) > Math.Max(30f, mk.Radius))

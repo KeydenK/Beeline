@@ -12,15 +12,15 @@ Scenario format and checks: `work\ClaudeTestKit\tests\README.md`.
 
 ## Test spot
 
-Tests 04-09 start at the **Yedlihmad aetheryte in Thavnair** and end ~50 y west of it (territory 957, aetheryte at world
+Tests 04-09 start and end at the **Yedlihmad aetheryte in Thavnair** (territory 957, aetheryte at world
 X 196, Z 628; from the game data). Stand next to it, on foot, nothing targeted, flying unlocked. Each test
 flies/walks out and comes back, so the whole folder runs in one go. The destinations are fixed world spots:
 
 | Spot | World X, Z | Used by |
 |---|---|---|
-| Walk target, ~65 y NW | 170, 570 | 04 |
+| Walk target, ~40 y NW | 175, 595 | 04 |
 | Fly target, ~110 y NW | 150, 530 | 05-09 |
-| Return spot, ~50 y W of the aetheryte | 150, 650 | 04-09 |
+| Return spot, by the aetheryte | 190, 615 | 04-09 |
 
 If a spot turns out to be bad ground (water, a roof, a wall), pick a new one with DalamudMCP `get_position`
 and change the numbers in the JSON files (the `mapclick`/`mapcursor`, `near:` and `dest=` values).
@@ -37,8 +37,9 @@ Every trip starts the way a player starts it, with the Test Kit's real-looking i
 Each test first opens the map (`do: map`), waits 0.8 s (a press right after the map opens is ignored on purpose,
 see 02), and parks the flag far away (`flag 600 -300`): a map icon covers ~38 y at the default zoom, so a leftover
 flag next to a test spot would catch the click (Beeline goes to the icon under the cursor, as for a player).
-Test spots stay more than ~40 y from every map icon (the aetheryte, the Gemstone Trader): clicking within an icon's
-reach goes to that icon (on an aetheryte that means a paid teleport). The clicked spot lands within a yalm or two of the target, so `dest=` checks allow +/-1 (the crosshair +/-6).
+The spots are open, flat ground (checked: the lab's 8/8 run). Zoomed out, a map icon covers ~38 y and a click near the
+aetheryte would land on its icon (= the game's paid teleport), so the map is zoomed in before each click (pending an
+absolute `/ctk mapzoom` level). Don't move the spots without checking the ground: 150,650 is walls and water. The clicked spot lands within a yalm or two of the target, so `dest=` checks allow +/-1 (the crosshair +/-6).
 
 ## The probe
 

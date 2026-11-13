@@ -2,7 +2,7 @@
   "name": "Beeline: controller press on the map (crosshair steered with the right stick, Cross) and back by Ctrl+click",
   "steps": [
     {
-      "assert": "zone:957 && near:180,640,60 && !mounted",
+      "assert": "zone:957 && near:196,628,30 && !mounted",
       "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair, flying unlocked"
     },
     {
@@ -69,7 +69,7 @@
       "msg": "you should be at the spot"
     },
     {
-      "mark": "back near the aetheryte"
+      "mark": "back to the aetheryte"
     },
     {
       "do": "map"
@@ -83,7 +83,7 @@
       "wait": 800
     },
     {
-      "do": "mapclick 150 650 Left ctrl"
+      "do": "mapclick 190 615 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -100,8 +100,8 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:150,650,10",
-      "msg": "you should be back near the aetheryte"
+      "assert": "near:190,615,10",
+      "msg": "you should be back to the aetheryte"
     },
     {
       "assert": "!anomaly:WOBBLE|STUCK|SNAP",

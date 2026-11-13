@@ -481,7 +481,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
             return;
         }
 
-        // Cursor on an aetheryte or a shard: go exactly there.
+        // Cursor on a city aethernet shard: go exactly there (the game itself doesn't, on a click).
         if (!string.IsNullOrWhiteSpace(tooltip))
         {
             if (places.FindShard(tooltip, territory) is { } shard)
@@ -494,12 +494,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
                         ShardTeleport(places, shard);
                     return;
                 }
-            }
-            if (places.FindMain(tooltip, territory) is { } main)
-            {
-                Travel.Cancel("replaced", quiet: true);
-                AetheryteTeleport(places, main);
-                return;
             }
         }
 
@@ -524,38 +518,24 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 Info($"{Tag} {what} position {diff:0} y from the game's readout: using the game's");
         }
 
+        // On a main aetheryte icon: the game teleports you there by itself (click or Cross), so Beeline stays out of it.
+        // (City aethernet shards are different: the game doesn't take you there on a click, Beeline does, above.)
+        var mainHit = !string.IsNullOrWhiteSpace(tooltip) ? places.FindMain(tooltip, territory) : null;
+        if (mainHit == null && world is { } w)
+        {
+            var iconWithin = IconHitRadius(map, agent);
+            mainHit = places.InTerritory(territory)
+                .Where(pl => pl.IsMain && !pl.Residential && pl.Position is { } pos && Vector2.Distance(pos, w) <= iconWithin)
+                .MinBy(pl => Vector2.Distance(pl.Position!.Value, w));
+        }
+        if (mainHit is { } main)
+        {
+            Info($"{Tag} On an aetheryte ({main.Name}): leaving it to the game's teleport");
+            Travel.Cancel("replaced", quiet: true);
+            return;
+        }
+
         Travel.Start(territory, mapId, coords, tooltip, IconHitRadius(map, agent), cursorStale: !_cursorMoved && world == null, world: world);
-    }
-
-    private void AetheryteTeleport(Places places, Place main)
-    {
-        try
-        {
-            if (Ipc.LifestreamBusy())
-            {
-                Info($"{Tag} Lifestream is busy, ignoring.");
-                return;
-            }
-            var activeId = Ipc.ActiveAetheryte();
-            if (activeId == main.Id) { Chat.Print("Beeline: you are already here."); return; }
-
-            // On that city's aethernet already: the aethernet is free and quicker than a teleport.
-            if (activeId != 0 && main.Group != 0 && places.ById(activeId) is { } active && active.Group == main.Group)
-            {
-                Info($"{Tag} Aethernet to {main.Name} (#{main.Id}) from #{activeId}");
-                if (!Ipc.AethernetTo(main.Id))
-                    Chat.PrintError($"Beeline: could not take the aethernet to {main.Name}.");
-                return;
-            }
-            Info($"{Tag} Teleport to {main.Name} (#{main.Id})");
-            if (!Ipc.TeleportTo(main.Id))
-                Chat.PrintError($"Beeline: could not teleport to {main.Name}.");
-        }
-        catch (Exception e)
-        {
-            Log.Warning($"{Tag} Lifestream call failed (is Lifestream installed and enabled?): {e.Message}");
-            Chat.PrintError("Beeline: Lifestream is not available.");
-        }
     }
 
     /// <summary>Takes the housing district aethernet if you're at one of that district's shards. False if you're not.</summary>

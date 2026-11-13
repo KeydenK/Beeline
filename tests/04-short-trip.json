@@ -2,7 +2,7 @@
   "name": "Beeline: short same-zone trip to a map spot (real Ctrl+click) and back (Yedlihmad, Thavnair)",
   "steps": [
     {
-      "assert": "zone:957 && near:180,640,60 && !mounted",
+      "assert": "zone:957 && near:196,628,30 && !mounted",
       "msg": "precondition: on foot next to the Yedlihmad aetheryte in Thavnair (see tests/README.md)"
     },
     {
@@ -29,7 +29,7 @@
       "wait": 800
     },
     {
-      "do": "mapclick 170 570 Left ctrl"
+      "do": "mapclick 175 595 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -37,7 +37,7 @@
       "msg": "the trip should start"
     },
     {
-      "assert": "probe:Beeline:route=direct; dest=957@\\((169|170|171),(569|570|571)\\)",
+      "assert": "probe:Beeline:route=direct; dest=957@\\((174|175|176),(594|595|596)\\)",
       "msg": "same zone, short: go directly (no paid teleport) to the clicked spot"
     },
     {
@@ -55,11 +55,11 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:170,570,10",
+      "assert": "near:175,595,10",
       "msg": "you should be at the clicked spot"
     },
     {
-      "mark": "back near the aetheryte"
+      "mark": "back to the aetheryte"
     },
     {
       "do": "map"
@@ -73,7 +73,7 @@
       "wait": 800
     },
     {
-      "do": "mapclick 150 650 Left ctrl"
+      "do": "mapclick 190 615 Left ctrl"
     },
     {
       "waitFor": "probe:Beeline:^trip=on",
@@ -90,8 +90,8 @@
       "msg": "it should end by arriving"
     },
     {
-      "assert": "near:150,650,10",
-      "msg": "you should be back near the aetheryte"
+      "assert": "near:190,615,10",
+      "msg": "you should be back to the aetheryte"
     },
     {
       "assert": "!anomaly:WOBBLE|STUCK|SNAP",

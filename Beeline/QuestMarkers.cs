@@ -60,12 +60,12 @@ internal static unsafe class QuestMarkers
 
     /// <param name="preferHeight">Prefer markers that know their height (the quest's own) over the map's icons.</param>
     public static MarkerHit? Find(uint territory, uint mapId, Vector2 cursor, string tooltip, float iconWithin, bool cursorReliable = false,
-                                  bool preferHeight = false)
+                                  bool preferHeight = false, bool quiet = false)
     {
         var IconWithin = MathF.Max(MinIconWithin, iconWithin);
         MarkerHit? best = null;
         var bestScore = float.MaxValue;
-        var diagnose = Plugin.Config_LogPresses; // only build the diagnostic list when it will be shown
+        var diagnose = Plugin.Config_LogPresses && !quiet; // only build the diagnostic list when it will be shown (not for repeated re-checks)
         // Diagnostics: keep just the raw data of the nearest few; text is only built at the end, if needed.
         var nearest = new List<(float Dist, string List, string Label, Vector3 Pos, float Radius, uint DataId, uint Territory)>();
         var list = "";

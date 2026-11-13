@@ -2,7 +2,7 @@
   "name": "Beeline: a new destination mid-trip replaces the current trip",
   "steps": [
     {
-      "assert": "zone:957 && near:180,640,60",
+      "assert": "zone:957 && near:196,628,30",
       "msg": "precondition: next to the Yedlihmad aetheryte in Thavnair"
     },
     {
@@ -42,7 +42,7 @@
       "wait": 3000
     },
     {
-      "mark": "new destination: back near the aetheryte"
+      "mark": "new destination: back to the aetheryte"
     },
     {
       "do": "map"
@@ -56,10 +56,10 @@
       "wait": 800
     },
     {
-      "do": "mapclick 150 650 Left ctrl"
+      "do": "mapclick 190 615 Left ctrl"
     },
     {
-      "waitFor": "probe:Beeline:^trip=on; .*dest=957@\\((149|150|151),(649|650|651)\\)",
+      "waitFor": "probe:Beeline:^trip=on; .*dest=957@\\((189|190|191),(614|615|616)\\)",
       "timeout": 8000,
       "msg": "the trip should now go to the new spot"
     },
@@ -77,8 +77,8 @@
       "msg": "it should arrive"
     },
     {
-      "assert": "near:150,650,10",
-      "msg": "you should be back near the aetheryte"
+      "assert": "near:190,615,10",
+      "msg": "you should be back to the aetheryte"
     },
     {
       "assert": "!anomaly:STUCK|SNAP",
