@@ -891,17 +891,12 @@ internal sealed unsafe class Travel : IDisposable
         // On the mount for a flying route: its first points were planned from the ground right around you. Going to them
         // once you're taking off (at once with a single jump) means dipping back down or turning back: start at the first
         // point that's actually away from you.
-        // Also skip points steeply above you (vnavmesh climbs to those almost straight up, hovering for a couple of
-        // seconds), but only when the straight line to the point after it is clear: next to a building that climb is
-        // what gets you over it.
+        // Never skip a nearby point well above you, though: leaving an enclosed spot (a walled camp, a courtyard), that
+        // point is the climb over the wall.
         if (_pathFly && Mounted())
-            while (next < points.Count - 1
-                   && (Vector2.Distance(Flat(points[next]), Flat(pos)) is var flat
-                       && (flat < 6f || (points[next].Y - pos.Y > flat * 0.7f && ClearLine(pos, points[next + 1])))))
+            while (next < points.Count - 1 && Vector2.Distance(Flat(points[next]), Flat(pos)) < 6f && points[next].Y - pos.Y < 3f)
                 next++;
         var route = next == 0 ? points : points.GetRange(next, points.Count - next);
-        if (_pathFly)
-            route = KeepClearOfGround(route);
         // vnavmesh's "tolerance" only matters when the exact spot can't be reached: its route still ends on the NPC/mob.
         // End it where it first gets within the stop distance instead. Flying to an NPC or object, that end point is put
         // on the ground (else you'd stop in the air, or fly on into its face): you land at talking distance.
@@ -979,52 +974,6 @@ internal sealed unsafe class Travel : IDisposable
             _lastPressInAir = hopping;
             Plugin.Info($"Jump to take off ({(hopping ? "second press" : "first press")})");
         }
-    }
-
-    /// <summary>
-    /// Flying route points (not the last, where you land) less than 3 y above the ground are lifted to 3 y: vnavmesh's
-    /// route can skim slopes, the mount touches down, lands, and vnavmesh then presses Jump again and again. One ground
-    /// lookup per point, once per route.
-    /// </summary>
-    private List<Vector3> KeepClearOfGround(List<Vector3> route)
-    {
-        if (route.Count < 2)
-            return route;
-        var lifted = new List<Vector3>(route);
-        var count = 0;
-        for (var i = 0; i < lifted.Count - 1; i++)
-        {
-            var pt = lifted[i];
-            try
-            {
-                if (_p.Ipc.NavGroundAt(pt.X, pt.Z, 2f, pt.Y + 1f) is { } ground && pt.Y - ground.Y < 3f)
-                {
-                    // Only if the lines to the points before and after stay clear (no awning or wall edge in the way).
-                    var up = pt with { Y = ground.Y + 3f };
-                    if ((i == 0 || ClearLine(lifted[i - 1], up)) && ClearLine(up, lifted[i + 1]))
-                    {
-                        lifted[i] = up;
-                        count++;
-                    }
-                }
-            }
-            catch { return route; } // vnavmesh gone: as it is
-        }
-        if (count > 0)
-            Plugin.Info($"{Plugin.Tag} Lifted {count} flying route point(s) skimming the ground");
-        return lifted;
-    }
-
-    /// <summary>Nothing solid on the straight line between two points (a collision ray; a little margin at the ends).</summary>
-    private static bool ClearLine(Vector3 from, Vector3 to)
-    {
-        var d = to - from;
-        var len = d.Length();
-        if (len < 1f)
-            return true;
-        var dir = d / len;
-        return !FFXIVClientStructs.FFXIV.Common.Component.BGCollision.BGCollisionModule
-            .RaycastMaterialFilter(from + dir * 0.5f, dir, out _, len - 1f);
     }
 
     /// <summary>Something solid above the spot (a roof, an arch, an overhang) within 60 y: no flying straight in.</summary>
@@ -1357,7 +1306,18 @@ internal sealed unsafe class Travel : IDisposable
                         }
                     }
                     if (inFlight && !_wasInFlight)
+                    {
                         _inFlightSince = Environment.TickCount64;
+                        // Airborne: the ground walk-ahead would pull the mount back down. Climb straight up a little until
+                        // the route takes over (straight up: forward could be a wall, e.g. leaving a walled camp).
+                        if (_pathFly && player != null && (_heldPath != null || _pathTask != null))
+                            try
+                            {
+                                _p.Ipc.NavFollow([player.Position + new Vector3(0, 6, 0)], true);
+                                _bridging = false;
+                            }
+                            catch { /* vnavmesh gone */ }
+                    }
                     if (inFlight && !_wasInFlight)
                         Plugin.Info($"{Plugin.Tag} Took off {_moveTime.Elapsed.TotalSeconds:0.0} s into the move");
                     _wasMounted = mounted;

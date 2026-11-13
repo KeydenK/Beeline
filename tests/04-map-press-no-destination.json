@@ -8,15 +8,16 @@
       "cmd": "/beeline stop"
     },
     {
-      "cmd": "/gaction \"Dismount\""
+      "do": "dismount"
     },
     {
-      "waitFor": "!mounted",
-      "timeout": 10000,
-      "msg": "on foot before the test (the previous trip may have ended on the mount, in the air)"
+      "waitFor": "event:dismount (done|FAILED)",
+      "timeout": 45000,
+      "msg": "on foot before the test (lands first if needed)"
     },
     {
-      "wait": 500
+      "assert": "!cond:Mounted",
+      "msg": "on foot"
     },
     {
       "do": "map close"
