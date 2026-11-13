@@ -589,6 +589,7 @@ internal sealed unsafe class Travel : IDisposable
         _allowRemount = false;
         _heldPath = null;
         _noFly = false;
+        _noWalk = false;
         _mountCastClock.Reset();
         _stuckStage = 0;
         _stuckPos = player.Position;
@@ -610,6 +611,7 @@ internal sealed unsafe class Travel : IDisposable
     private float _destRange;     // stop this close (0 = exactly there)
     private bool _flying;         // vnavmesh was asked to fly
     private bool _noFly;          // flying failed on this move (no path, can't take off, no mount): stay on the ground
+    private bool _noWalk;         // no walkable ground ahead while the mount comes: stay put for this move
     private bool _wantMount;      // summon a mount on the way
     private bool _sawFlying, _sawMounted;
     private int _mountAttempts;   // calls refused by the game (e.g. just after an instant action)
@@ -770,9 +772,12 @@ internal sealed unsafe class Travel : IDisposable
             // about your height (a straight line knows nothing of water or drops: summoned in the water, the mount
             // is gone at once). No ground ahead: you stay put and the mount comes where you stand.
             var step = Math.Min(Math.Clamp(Config.RunSpeed * 1.5f, 8f, 40f), to.Length());
+            if (_noWalk)
+                return;
             var safe = WalkableAhead(pos, dir, step);
             if (safe < 2f)
             {
+                _noWalk = true; // decided for this leg: no lookups or log lines every step while the mount comes
                 Plugin.Info($"{Plugin.Tag} No walkable ground ahead (water or a drop): waiting for the mount here");
                 return;
             }
@@ -1194,21 +1199,23 @@ internal sealed unsafe class Travel : IDisposable
                     _sawMounted |= mounted;
                     _sawFlying |= inFlight;
 
-                    // Mount Roulette on the way. A press the game accepted but that started no cast within 0.5 s was
-                    // dropped (right after a loading screen, for instance): pressed again, up to 4 presses. A call the
-                    // game refuses (e.g. right after an instant action) doesn't count; give up after ~3 s of refusals.
+                    // Mount Roulette on the way. A summon that goes through shows as a cast at once: a press with no cast
+                    // a step later was dropped (right after a loading screen, or another plugin's action at the same
+                    // moment): pressed again right away, the game queues it behind that action's animation (up to 30
+                    // presses). A call the game refuses (e.g. right after an instant action) doesn't count; give up
+                    // after ~3 s of refusals.
                     // Never once you've been mounted on this move: Mount Roulette while mounted would dismount you.
                     if (_wantMount && !mounted && (!_sawMounted || _allowRemount) && !mountingNow && !c[ConditionFlag.InCombat]
                         && !c[ConditionFlag.InFlight] && !c[ConditionFlag.Jumping61] && _mountAttempts < 30
-                        && (_mountTries == 0 || (_mountTries < 4 && _mountCastClock.ElapsedMilliseconds > 500)))
+                        && (_mountTries == 0 || (_mountTries < 30 && _mountCastClock.ElapsedMilliseconds >= 90)))
                     {
                         if (SummonMount())
                         {
                             _mountTries++;
                             _allowRemount = false;
                             _mountCastClock.Restart();
-                            if (_mountTries > 1)
-                                Plugin.Info($"{Plugin.Tag} The mount didn't start: summoning again");
+                            if (_mountTries == 2)
+                                Plugin.Info($"{Plugin.Tag} The mount didn't start: summoning again (until it does)");
                         }
                         else
                             _mountAttempts++;
