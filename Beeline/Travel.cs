@@ -1164,18 +1164,21 @@ internal sealed unsafe class Travel : IDisposable
                     _sawMounted |= mounted;
                     _sawFlying |= inFlight;
 
-                    // Mount Roulette on the way: once, and once more after 2.5 s if it didn't take. A call the game
-                    // refuses (e.g. right after an instant action) doesn't count; give up after ~3 s of refusals.
+                    // Mount Roulette on the way. A press the game accepted but that started no cast within 0.5 s was
+                    // dropped (right after a loading screen, for instance): pressed again, up to 4 presses. A call the
+                    // game refuses (e.g. right after an instant action) doesn't count; give up after ~3 s of refusals.
                     // Never once you've been mounted on this move: Mount Roulette while mounted would dismount you.
                     if (_wantMount && !mounted && (!_sawMounted || _allowRemount) && !mountingNow && !c[ConditionFlag.InCombat]
                         && !c[ConditionFlag.InFlight] && !c[ConditionFlag.Jumping61] && _mountAttempts < 30
-                        && (_mountTries == 0 || (_mountTries == 1 && _mountCastClock.ElapsedMilliseconds > 2500)))
+                        && (_mountTries == 0 || (_mountTries < 4 && _mountCastClock.ElapsedMilliseconds > 500)))
                     {
                         if (SummonMount())
                         {
                             _mountTries++;
                             _allowRemount = false;
                             _mountCastClock.Restart();
+                            if (_mountTries > 1)
+                                Plugin.Info($"{Plugin.Tag} The mount didn't start: summoning again");
                         }
                         else
                             _mountAttempts++;
