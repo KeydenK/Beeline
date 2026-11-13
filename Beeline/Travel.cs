@@ -766,12 +766,42 @@ internal sealed unsafe class Travel : IDisposable
         }
         else
         {
-            // A few steps toward the target while the mount is summoned.
+            // A few steps toward the target while the mount is summoned, only as far as there's walkable ground at
+            // about your height (a straight line knows nothing of water or drops: summoned in the water, the mount
+            // is gone at once). No ground ahead: you stay put and the mount comes where you stand.
             var step = Math.Min(Math.Clamp(Config.RunSpeed * 1.5f, 8f, 40f), to.Length());
-            _bridgeEnd = new Vector3(pos.X + dir.X * step, pos.Y, pos.Z + dir.Y * step);
+            var safe = WalkableAhead(pos, dir, step);
+            if (safe < 2f)
+            {
+                Plugin.Info($"{Plugin.Tag} No walkable ground ahead (water or a drop): waiting for the mount here");
+                return;
+            }
+            _bridgeEnd = new Vector3(pos.X + dir.X * safe, pos.Y, pos.Z + dir.Y * safe);
             _p.Ipc.NavFollow([_bridgeEnd], false);
         }
         _bridging = true;
+    }
+
+    /// <summary>
+    /// How far you can walk straight ahead on vnavmesh's walkable ground, checked every 3 y (a few mesh lookups, once
+    /// per walk): each spot at most 2.5 y above or below the previous one, so slopes are fine while water (its floor
+    /// is the bottom, well below) or a drop ends it.
+    /// </summary>
+    private float WalkableAhead(Vector3 pos, Vector2 dir, float step)
+    {
+        var safe = 0f;
+        var lastY = pos.Y;
+        for (var d = 3f; ; d += 3f)
+        {
+            var at = Math.Min(d, step);
+            var floor = _p.Ipc.NavGroundAt(pos.X + dir.X * at, pos.Z + dir.Y * at, 1.5f, lastY + 3f);
+            if (floor is not { } f || Math.Abs(f.Y - lastY) > 2.5f)
+                return safe;
+            lastY = f.Y;
+            safe = at;
+            if (at >= step)
+                return safe;
+        }
     }
 
     /// <summary>
