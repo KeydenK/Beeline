@@ -15,6 +15,7 @@ internal sealed class Companion : IDisposable
     private readonly Plugin _p;
     private readonly ICallGateProvider<bool> _isTrip;
     private readonly ICallGateProvider<bool> _willMount;
+    private readonly ICallGateProvider<bool> _stopsForEnemies;
     private readonly ICallGateProvider<Dictionary<string, float>> _speeds;
     private readonly ICallGateProvider<object> _tripStarted, _tripEnded;
     private readonly ICallGateSubscriber<bool> _guBoosts, _guEnemy;
@@ -32,6 +33,9 @@ internal sealed class Companion : IDisposable
         _tripEnded   = pi.GetIpcProvider<object>("Beeline.TripEnded");
         _isTrip.RegisterFunc(() => _p.Travel.IsActive);
         _willMount.RegisterFunc(() => _p.Travel.WillMount);
+        // Giddy Up respects it: off, it leaves you on the mount during a trip (you break the trip by moving).
+        _stopsForEnemies = pi.GetIpcProvider<bool>("Beeline.StopsTripForEnemies");
+        _stopsForEnemies.RegisterFunc(() => _p.Config.StopOnEnemyTarget);
         _speeds.RegisterFunc(LearnedSpeeds);
 
         _guBoosts     = pi.GetIpcSubscriber<bool>("GiddyUp.HandlesSpeedBuffs");
@@ -45,6 +49,7 @@ internal sealed class Companion : IDisposable
     {
         _isTrip.UnregisterFunc();
         _willMount.UnregisterFunc();
+        _stopsForEnemies.UnregisterFunc();
         _speeds.UnregisterFunc();
         _guDismounted.Unsubscribe(OnGiddyUpDismounted);
     }

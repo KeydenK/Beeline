@@ -235,8 +235,8 @@ internal sealed unsafe class ConfigWindow : Window
               "Being attacked doesn't stop a trip (you keep going, like the game keeps you on your mount). With this "
             + "on, targeting something you can attack stops it, so you can start the fight; with Giddy Up installed, "
             + "once the enemy is within your attack range, as set in Giddy Up (or at once if Giddy Up dismounts as soon "
-            + "as you target). Off (default): targeting doesn't stop the trip, but with Giddy Up it still stops when "
-            + "Giddy Up gets you off the mount for that enemy.");
+            + "as you target). Off (default): targeting doesn't stop the trip, and Giddy Up leaves you on the mount "
+            + "during it. Move yourself to break the trip; then Giddy Up gets you off as usual.");
         Check("Show the time left in the server info bar", () => Config.ShowTripTimer, v => Config.ShowTripTimer = v,
               "During a trip, \"Beeline 0:24\" at the top right of the screen: the time left, from your learned speeds. "
             + "Updates once a second.");
