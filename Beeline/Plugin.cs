@@ -597,13 +597,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private string _tooltipAtMouseDown = "";
     private bool _keyWasDown;
 
-    private static bool GameHasFocus()
+    internal static bool GameHasFocus()
     {
         var fw = FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance();
         return fw != null && fw->GameWindow != null && GetForegroundWindow() == fw->GameWindow->WindowHandle;
     }
 
-    private static bool IsDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+    internal static bool IsDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
 
     /// <summary>
     /// A click on the map: the button goes down and up over the map without dragging it (so moving the map

@@ -1584,6 +1584,12 @@ internal sealed unsafe class Travel : IDisposable
         foreach (var k in MoveKeys)
             if (Plugin.KeyState[k])
                 return true;
+
+        // Both mouse buttons held: the game's other way to walk (in the game window, not over a plugin window).
+        const int LeftButton = 0x01, RightButton = 0x02;
+        if (Plugin.IsDown(LeftButton) && Plugin.IsDown(RightButton) && Plugin.GameHasFocus()
+            && !Dalamud.Bindings.ImGui.ImGui.GetIO().WantCaptureMouse)
+            return true;
         return false;
     }
 

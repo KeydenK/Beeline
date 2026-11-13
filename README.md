@@ -138,7 +138,7 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 ## When does a trip stop?
 
 - **You arrive.** (Next to the quest NPC or object, at the safe distance from quest enemies, or at the spot.)
-- **You move your character** with the left stick or the movement keys (W, A, S, D, Q, E and the arrow keys). Typing in chat or in a plugin window doesn't count.
+- **You move your character** with the left stick, the movement keys (W, A, S, D, Q, E and the arrow keys), or both mouse buttons held. Typing in chat or clicking in a plugin window doesn't count.
 - **You press the button again** on something else: the new trip replaces the old one.
 - **You type `/beeline stop`**, or click **Stop** in the settings window.
 - **You change zone** after arriving (a duty pops, you teleport yourself, you log out...).
