@@ -152,7 +152,7 @@ The tab warns you when a choice clashes with the map (Square / Circle close it, 
 
 So that Beeline never goes somewhere you didn't ask for:
 
-- The button is **ignored for half a second after the map opens**, so the press that opened the map (from the quest journal, for example) doesn't count.
+- The press that opened the map (from the quest journal, for example) **doesn't count** if it's still held when the map appears; it only counts once released. Any new press counts right away.
 - **Holding the button** only counts once.
 - With a controller, the press only counts **when the map has the focus**, not when another window (like the journal) is in front of it.
 - With a mouse or keyboard, the mouse must be **over the map**, and not over a plugin window.
