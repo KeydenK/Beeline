@@ -1,5 +1,5 @@
 {
-  "name": "Beeline: the press that opens the map never starts a trip",
+  "name": "Beeline: the press that opens the map (still held when it appears) never starts a trip",
   "steps": [
     {
       "mark": "precondition: nothing targeted, not right next to an NPC or the aetheryte (Cross may also reach the game)"
@@ -19,30 +19,27 @@
       "wait": 500
     },
     {
-      "do": "map"
+      "mark": "hold Cross, open the map while it is held (like Map from the journal), release it"
+    },
+    {
+      "do": "seq \"pad Cross 1200; wait 300; map\""
     },
     {
       "waitFor": "window:AreaMap",
-      "timeout": 2000,
+      "timeout": 3000,
       "msg": "the map should open"
     },
     {
-      "do": "focus AreaMap"
-    },
-    {
-      "do": "pad Cross 80"
-    },
-    {
-      "waitFor": "event:\\[Beeline\\] Button ignored: the map has just opened",
+      "waitFor": "event:\\[Beeline\\] The button that opened the map is still held",
       "timeout": 2000,
-      "msg": "a press within 0.5 s of opening the map must be ignored"
+      "msg": "Beeline should notice the button already held"
     },
     {
-      "wait": 800
+      "wait": 1500
     },
     {
       "assert": "probe:Beeline:^trip=off",
-      "msg": "no trip may start"
+      "msg": "releasing that press must not start a trip"
     },
     {
       "do": "map close"

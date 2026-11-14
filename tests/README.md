@@ -35,8 +35,7 @@ Every trip starts the way a player starts it, with the Test Kit's real-looking i
 - `/ctk mapcursor <x> <z> cross`: steers the map's controller crosshair onto the spot with the right stick, then
   presses Cross (09). Its result shows as the event `mapcursor reached` / `mapcursor FAILED`.
 
-Each test first opens the map (`do: map`), waits 0.8 s (a press right after the map opens is ignored on purpose,
-see 02), and parks the flag far away (`flag 600 -300`): a map icon covers ~38 y at the default zoom, so a leftover
+Each test first opens the map (`do: map`), waits 0.8 s (for the map to settle), and parks the flag far away (`flag 600 -300`): a map icon covers ~38 y at the default zoom, so a leftover
 flag next to a test spot would catch the click (Beeline goes to the icon under the cursor, as for a player).
 The spots are open, flat ground (checked: the lab's 8/8 run). Zoomed out, a map icon covers ~38 y and a click near the
 aetheryte would land on its icon (= the game's paid teleport), so the map is zoomed in before each click (pending an
@@ -75,7 +74,7 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
 | File | Checks | Preconditions |
 |---|---|---|
 | 01-probe | The probe answers in the documented format; `/beeline stop` with no trip does nothing. | Anywhere, no trip running. |
-| 02-map-just-opened | The press right after the map opens (within 0.5 s) is ignored, no trip starts. | Nothing targeted, not right next to an NPC/aetheryte (the virtual Cross may also reach the game). |
+| 02-map-just-opened | A press already held when the map opens (the one that opened it) is ignored until released; no trip starts. (A new press right after the map opens counts at once: covered by the other tests.) | Nothing targeted, not right next to an NPC/aetheryte (the virtual Cross may also reach the game). |
 | 03-short-trip | From the aetheryte, Ctrl+click the start spot ~40 y away: `route=direct`, reaches it; no WOBBLE/STUCK/SNAP. | Test spot, on foot. |
 | 04-map-press-no-destination | Map open 1.2 s, Cross: Beeline sees the press (or ignores it if the map has no focus); a trip to where you stand ends by itself; no wobble/stuck/snap. | As 02, open world. |
 | 05-flying-trip | ~110 y trip: mount summoned, take-off (`move=flying`, log "Took off"), lands at the clicked spot, flies back; no WOBBLE/STUCK/SNAP. | Test spot, on foot, flying unlocked. |

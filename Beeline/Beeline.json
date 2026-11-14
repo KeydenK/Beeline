@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "Fix: walking to a city shard for the aethernet could turn into running all the way on foot when the destination's quest NPC or marker was found on the way; that first leg now always ends at the shard and takes the aethernet."
+  "Changelog": "No more half-second wait after the map opens: a press now counts right away (open a quest's map and press at once to go there). Only the press that opened the map, if it's still held when the map appears, is ignored until you let go."
 }

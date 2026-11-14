@@ -322,14 +322,12 @@ public sealed unsafe class Plugin : IDalamudPlugin
     // ignore presses shortly after the map became visible (or after a gap in its updates), and presses
     // made while another window (the journal) has the focus.
     private long _mapLastUpdate;
-    private long _mapOpenedAt;
     private bool _mapWasVisible;
     private bool _awaitRelease;
     private System.Numerics.Vector2 _baselineCoords;
     private uint _baselineMapId;
     private bool _cursorMoved;
     private const int MapClosedGapMs = 200;
-    private const int IgnoreAfterOpenMs = 500;
 
     // ---------------- Fallback when Dalamud's window events don't arrive (e.g. right after a game patch) ----------------
 
@@ -397,7 +395,22 @@ public sealed unsafe class Plugin : IDalamudPlugin
         if (!visible)
             return; // closed map: nothing to do
         if (justOpened)
-            _mapOpenedAt = now;
+        {
+            // The press that opened the map (Map from the journal, the minimap, a hotkey) may still be held: it only
+            // counts once released, as a new press. Any new press counts at once, even right after the map opens.
+            var held = false;
+            if (Config.Button != GamepadButtons.None && Gamepad.Raw(Config.Button) != 0)
+                held = _awaitRelease = true;
+            if (MouseVk() is var vk && vk != 0 && IsDown(vk))
+            {
+                held = _mouseWasDown = true;
+                _mouseDownOnMap = false;
+            }
+            if (HotkeyWentDown() || _keyWasDown)
+                held = true; // (HotkeyWentDown also records that the key is down: no press until it's released)
+            if (held)
+                Info($"{Tag} The button that opened the map is still held: it will count once released");
+        }
 
         // The game only updates the cursor position when the cursor moves: after the map opens or switches
         // to another map (e.g. "Map" from the journal), it still holds the old one until you move it.
@@ -431,12 +444,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
         if (!(padPressed || mousePressed || keyPressed))
             return;
-
-        if (now - _mapOpenedAt < IgnoreAfterOpenMs)
-        {
-            Info($"{Tag} Button ignored: the map has just opened");
-            return;
-        }
 
         // Mouse / keyboard: the mouse must be over the map (that's where the cursor position comes from).
         if (!padPressed && !MouseOverMap(map))
@@ -635,17 +642,20 @@ public sealed unsafe class Plugin : IDalamudPlugin
     /// A click on the map: the button goes down and up over the map without dragging it (so moving the map
     /// with a left drag doesn't count), with the chosen modifier held.
     /// </summary>
+    /// <summary>The Windows key code of the chosen mouse button (0: no mouse trigger).</summary>
+    private int MouseVk() => Config.MouseButton switch
+    {
+        MouseTrigger.Left    => 0x01, // VK_LBUTTON
+        MouseTrigger.Right   => 0x02, // VK_RBUTTON
+        MouseTrigger.Middle  => 0x04, // VK_MBUTTON
+        MouseTrigger.Back    => 0x05, // VK_XBUTTON1
+        MouseTrigger.Forward => 0x06, // VK_XBUTTON2
+        _ => 0,
+    };
+
     private bool MouseClicked(AddonAreaMap* map)
     {
-        var vk = Config.MouseButton switch
-        {
-            MouseTrigger.Left    => 0x01, // VK_LBUTTON
-            MouseTrigger.Right   => 0x02, // VK_RBUTTON
-            MouseTrigger.Middle  => 0x04, // VK_MBUTTON
-            MouseTrigger.Back    => 0x05, // VK_XBUTTON1
-            MouseTrigger.Forward => 0x06, // VK_XBUTTON2
-            _ => 0,
-        };
+        var vk = MouseVk();
         if (vk == 0)
         {
             _mouseWasDown = false;
