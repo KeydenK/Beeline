@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "In cities, Beeline now also considers walking to the nearest aethernet shard and taking the aethernet from there, and picks it whenever it's the quickest way (often the case when a shard is close by: no teleport cast or loading screen, and it's free). Clicking a shard on the map uses the same quickest-way choice instead of always teleporting to the city's main aetheryte first."
+  "Changelog": "Fix: walking to a city shard for the aethernet could turn into running all the way on foot when the destination's quest NPC or marker was found on the way; that first leg now always ends at the shard and takes the aethernet."
 }

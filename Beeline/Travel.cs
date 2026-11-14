@@ -1460,7 +1460,8 @@ internal sealed unsafe class Travel : IDisposable
                 if (moving && player != null && Watchdog(player, c))
                     return;
                 // The quest's exact marker showed up after arriving (height, NPC): re-route there (the right floor).
-                if (moving && !_refined && player != null && Environment.TickCount64 >= _refineAt)
+                // (Not while walking to a shard for the aethernet: that first leg must reach the shard.)
+                if (moving && !_refined && _preShard == null && player != null && Environment.TickCount64 >= _refineAt)
                 {
                     _refineAt = Environment.TickCount64 + 1000;
                     if (RefineMarker(Plugin.ClientState.TerritoryType))
@@ -1482,7 +1483,7 @@ internal sealed unsafe class Travel : IDisposable
                 }
                 // A quest marker without an object id: look for its object/NPC on the way, once a second, and head
                 // straight for it as soon as the game has loaded it (instead of going to the marker first).
-                if (moving && !_approached && _dataId == 0 && player != null && Environment.TickCount64 >= _questScanAt)
+                if (moving && !_approached && _dataId == 0 && _preShard == null && player != null && Environment.TickCount64 >= _questScanAt)
                 {
                     _questScanAt = Environment.TickCount64 + 1000;
                     if (QuestObjectInArea() is { } early)
