@@ -490,8 +490,15 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 if (!shard.Residential || ResidentialHop(shard))
                 {
                     Travel.Cancel("replaced", quiet: true);
+                    // Standing at a shard of that city: the aethernet straight there. Otherwise the quickest way to it:
+                    // walking, walking to the nearest shard for the aethernet, or a teleport then the aethernet.
                     if (!shard.Residential)
-                        ShardTeleport(places, shard);
+                    {
+                        if (shard.Position is { } shardPos && !AtShardOf(places, shard))
+                            Travel.Start(territory, mapId, coords, "", IconHitRadius(map, agent), world: shardPos);
+                        else
+                            ShardTeleport(places, shard);
+                    }
                     return;
                 }
             }
@@ -551,6 +558,17 @@ public sealed unsafe class Plugin : IDalamudPlugin
             if (!Ipc.ResidentialAethernetTo(shard.Id))
                 Chat.PrintError($"Beeline: could not take the aethernet to {shard.Name}.");
             return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Standing at an aetheryte/shard of the same city network as this shard (the aethernet works from here).</summary>
+    private bool AtShardOf(Places places, Place shard)
+    {
+        try
+        {
+            var activeId = Ipc.ActiveAetheryte();
+            return activeId != 0 && places.ById(activeId) is { } active && active.Group == shard.Group;
         }
         catch { return false; }
     }

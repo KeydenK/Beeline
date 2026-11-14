@@ -22,7 +22,7 @@ It's made for controllers, and works just as well with a mouse or a keyboard key
 ## Features
 
 - **One button, everything on the map:**
-  - **On an aethernet shard:** you go there. If you're on that city's aethernet, the aethernet is used (it's free); otherwise you teleport, and take the aethernet from there.
+  - **On an aethernet shard:** you go there the quickest way: straight there, walking to the nearest shard of that city and taking the aethernet, or teleporting and taking the aethernet from there.
   - **On a main aetheryte:** the game itself teleports you there (as it always does on a click), so Beeline stays out of the way.
   - **Anywhere else, in any zone:** Beeline compares going there directly, taking the aethernet, and teleporting to the aetheryte (or shard) closest to the spot, and picks the quickest. Then it:
     - summons a mount on the way when that's faster than staying on foot (your favourite mount or a roulette, while you keep moving),

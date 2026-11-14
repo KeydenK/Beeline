@@ -60,7 +60,7 @@ trip=off; phase=idle; trips=4; last=arrived; lastleft=2; zone=957; mounted=0; in
   (waiting for vnavmesh) · `moving` · `idle`.
 - `move` (while moving): `mounting` (mount on its way) · `takeoff` (mounted, flying leg, not in the air yet) ·
   `flying` · `riding` · `walking`.
-- `route`: `direct` · `teleport` · `aethernet` · `teleport+aethernet`. `dest`: territory@(world X,Z) of the
+- `route`: `direct` · `teleport` · `aethernet` · `walk+aethernet` (walk to the nearest shard, then the aethernet) · `teleport+aethernet`. `dest`: territory@(world X,Z) of the
   destination; `left`: yalms (flat) still to go; `t` / `est`: seconds since the trip started / the route's estimate.
 - `path`: `computing` · `held` (flying path ready, waiting for the mount) · `ready`. `nofly=1`: this move stays on the ground. `stuck`: Beeline's own stuck
   watchdog stage (0 = fine).
@@ -89,6 +89,11 @@ Costs: 04-09 should never pay for a teleport (10 pays two on purpose) (all trips
 Beeline ever picks a teleport there, the assert fails, but the teleport still happens and costs gil.
 
 ## Manual only (not automated)
+
+- **Walk to the nearest shard, then the aethernet** (cities): stand in a city away from its shards, click a spot
+  near another shard (or the shard itself): expect `route=walk+aethernet` when that's the quickest, the log lines
+  "Walking to <shard> for the aethernet" and "At the shard: aethernet to #<id>", then the rest of the way. To be
+  automated once spots in a city are checked in game (/ctk spotcheck).
 
 - **Cross-zone trips, teleport / aethernet routes, shard or aetheryte under the cursor**: need Lifestream and
   cost gil (teleports), and the cursor on a map icon. Check by hand: point at a spot in another zone, press

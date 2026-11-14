@@ -48,6 +48,10 @@ internal sealed unsafe class Travel : IDisposable
     private float _areaRadius;
     private uint _finalTerritory;  // zone of the destination (_territory is the zone of the current step)
     private uint _pendingShard;    // aethernet hop still to take after the teleport (0 = none)
+    // In a city but not standing at a shard: walk to the nearest shard first, then take the aethernet from there.
+    private Place? _preShard;          // the shard to walk to (null = no such first leg)
+    private uint _preShardThen;        // the shard to take the aethernet to from there
+    private Vector2? _preShardArrival; // where that aethernet hop lands
     private Vector2? _shardArrival;
     private bool _endOnArrival;    // shard trips: done once we're there
     private readonly Stopwatch _tripTime = new();
@@ -177,7 +181,7 @@ internal sealed unsafe class Travel : IDisposable
         Plugin.Info($"{Plugin.Tag} Travel to ({mapCoords.X:0.0}, {mapCoords.Y:0.0}) \"{Plugin.Redact(tooltip)}\" in territory {territory}: {route.Value.Describe}");
         var r = route.Value;
 #if DEVTOOLS
-        _testRoute = r.ThenShard != 0 ? "teleport+aethernet" : r.FirstHop switch { Hop.Teleport => "teleport", Hop.Aethernet => "aethernet", _ => "direct" };
+        _testRoute = r.ThenShard != 0 ? "teleport+aethernet" : r.Describe.StartsWith("walk to") ? "walk+aethernet" : r.FirstHop switch { Hop.Teleport => "teleport", Hop.Aethernet => "aethernet", _ => "direct" };
         _testMarker = marker?.Label ?? "";
 #endif
         _tripEstimate = r.Cost;
@@ -283,6 +287,7 @@ internal sealed unsafe class Travel : IDisposable
     {
         _toldMuted = false;
         _muteJumpToastsUntil = 0;
+        _preShard = null;
         HideTimer();
         var wasActive = _phase != Phase.None;
         if (wasActive)
@@ -439,6 +444,12 @@ internal sealed unsafe class Travel : IDisposable
     private enum Hop { None, Teleport, Aethernet }
     private enum MoveMode { Run, Peloton, Sprint, Jog, Ride, Fly }
 
+    /// <summary>The unlocked shard of a city's aethernet nearest to you, on the map you're on (null if none).</summary>
+    private static Place? NearestShard(Places places, byte group, uint territory, Vector2 here, UIState* ui, uint exceptId)
+        => places.InTerritory(territory)
+            .Where(p => !p.Residential && p.Group == group && p.Id != exceptId && p.Position != null && ui->IsAetheryteUnlocked(p.Id))
+            .MinBy(p => Vector2.Distance(here, p.Position!.Value));
+
     private Route? BestRoute(uint territory, Vector2 target, Vector2 here)
     {
         var places = _p.Places;
@@ -491,6 +502,22 @@ internal sealed unsafe class Travel : IDisposable
             {
                 var id = place.Id;
                 routes.Add(new Route(Config.AethernetSeconds + rest, $"aethernet to {name}", pos, () => _p.Ipc.AethernetTo(id), Hop.Aethernet));
+            }
+            // In that city but not standing at a shard: walk to the nearest one of its shards, then take the aethernet
+            // (free, and usually much quicker than a paid teleport to the main aetheryte plus the aethernet).
+            else if (Config.UseShardsForTravel && active == null && place.Group != 0
+                     && NearestShard(places, place.Group, current, here, ui, exceptId: place.Id) is { Position: { } nearPos } near)
+            {
+                var id = place.Id;
+                var walk = LegSeconds(Vector2.Distance(here, nearPos), current, mounted) + 1.5f; // + reaching it / opening the menu
+                routes.Add(new Route(walk + Config.AethernetSeconds + rest, $"walk to {near.Name} and take the aethernet to {name}", null, () =>
+                {
+                    _preShard = near;
+                    _preShardThen = id;
+                    _preShardArrival = pos;
+                    _territory = current; // the first leg is on this map
+                    return true;
+                }, Hop.None));
             }
 
             // Paid teleports to the map you're already on only if allowed (the aethernet above is free and always allowed).
@@ -1169,6 +1196,21 @@ internal sealed unsafe class Travel : IDisposable
                 if (!ready) return;
 
                 var here = Plugin.ClientState.TerritoryType;
+                // First leg: to the nearest shard (the aethernet is taken there).
+                if (_preShard is { Position: { } sp } preShard && player != null)
+                {
+                    Vector3 to;
+                    try { to = _p.Ipc.NavGroundAt(sp.X, sp.Y, 6, player.Position.Y + 8) ?? _p.Ipc.NavGroundAt(sp.X, sp.Y, 6) ?? new Vector3(sp.X, player.Position.Y, sp.Y); }
+                    catch { Cancel("failed: vnavmesh is not available"); return; }
+                    var mountToShard = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.InCombat] && CanMount(here)
+                                       && MountIsFaster(Vector2.Distance(Flat(player.Position), sp), here);
+                    Plugin.Info($"{Plugin.Tag} Walking to {preShard.Name} for the aethernet");
+                    StartMoving(player, to, 4f, false, mountToShard);
+                    try { SendMove(false); }
+                    catch { Cancel("failed: vnavmesh is not available"); return; }
+                    SetPhase(Phase.Moving);
+                    return;
+                }
                 RefineMarker(here);
                 // Far away: summon a mount (on the way, or right here before taking off).
                 var wantMount = Config.AutoMount && !c[ConditionFlag.Mounted] && !c[ConditionFlag.RidingPillion] && !c[ConditionFlag.InCombat] && CanMount(here)
@@ -1454,6 +1496,23 @@ internal sealed unsafe class Travel : IDisposable
                         SetPhase(Phase.Moving);
                         return;
                     }
+                }
+                if (!moving && _phaseTime.Elapsed.TotalSeconds > 1.5 && _preShard != null)
+                {
+                    // At the nearest shard: take the aethernet, then go on from where it lands.
+                    var then = _preShardThen;
+                    _preShard = null;
+                    bool ok;
+                    try { ok = _p.Ipc.AethernetTo(then); } catch { ok = false; }
+                    if (!ok) { Cancel("failed: could not take the aethernet"); return; }
+                    Plugin.Info($"{Plugin.Tag} At the shard: aethernet to #{then}");
+                    _hop = Hop.Aethernet;
+                    _hopTime.Restart();
+                    _arrival = _preShardArrival;
+                    _territory = _finalTerritory;
+                    _navStarted = false;
+                    SetPhase(Phase.Arriving);
+                    return;
                 }
                 if (!moving && _phaseTime.Elapsed.TotalSeconds > 1.5)
                 {
