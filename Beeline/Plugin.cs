@@ -426,6 +426,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
             _cursorMoved = true;
 
         // Controller: holding the button makes the game repeat it, so after a press wait until it is released.
+        // Controller: holding the button makes the game repeat it, so after a press wait until it is released. (Extra
+        // presses for the trip already under way are dropped later: same destination = nothing new to do.)
         var padPressed = false;
         if (_awaitRelease)
         {
@@ -496,16 +498,17 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 // Housing district shard: the aethernet works only from a shard of that district; otherwise walk there.
                 if (!shard.Residential || ResidentialHop(shard))
                 {
-                    Travel.Cancel("replaced", quiet: true);
                     // Standing at a shard of that city: the aethernet straight there. Otherwise the quickest way to it:
-                    // walking, walking to the nearest shard for the aethernet, or a teleport then the aethernet.
-                    if (!shard.Residential)
+                    // walking, walking to the nearest shard for the aethernet, or a teleport then the aethernet
+                    // (Travel.Start keeps a trip already going there, or replaces it).
+                    if (shard.Position is { } shardPos && !shard.Residential && !AtShardOf(places, shard))
                     {
-                        if (shard.Position is { } shardPos && !AtShardOf(places, shard))
-                            Travel.Start(territory, mapId, coords, "", IconHitRadius(map, agent), world: shardPos);
-                        else
-                            ShardTeleport(places, shard);
+                        Travel.Start(territory, mapId, coords, "", IconHitRadius(map, agent), world: shardPos);
+                        return;
                     }
+                    Travel.Cancel("replaced", quiet: true);
+                    if (!shard.Residential)
+                        ShardTeleport(places, shard);
                     return;
                 }
             }

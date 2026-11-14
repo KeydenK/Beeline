@@ -166,7 +166,24 @@ internal sealed unsafe class Travel : IDisposable
         }
         catch { /* Lifestream missing */ }
 
+        // The same destination as the trip already under way (a repeated or held press, the controller flickering when
+        // a window opens): nothing new to do, keep going. A different destination replaces the trip, at once.
+        if (_phase != Phase.None && territory == _finalTerritory && Vector2.Distance(target, _target) < 4f)
+        {
+            Plugin.Info($"{Plugin.Tag} Same destination as the trip under way: keeping it");
+            return;
+        }
+        // Replacing a trip whose teleport is being cast: cancel that cast first, else the game refuses the new one.
+        var castingHop = _phase == Phase.Arriving && _hop == Hop.Teleport && Plugin.Condition[ConditionFlag.Casting];
         Cancel("replaced", quiet: true); // a new press replaces the current trip
+        if (castingHop)
+        {
+            UIState.Instance()->Hotbar.CancelCast();
+            Plugin.Info($"{Plugin.Tag} Cancelled the teleport being cast for the new destination");
+            var (t0, m0, c0, tt, iw, w) = (territory, mapId, mapCoords, tooltip, iconWithin, world ?? target);
+            Plugin.Framework.RunOnTick(() => Start(t0, m0, c0, tt, iw, world: w), TimeSpan.FromMilliseconds(250));
+            return;
+        }
 
         var here = new Vector2(player.Position.X, player.Position.Z);
         var route = BestRoute(territory, target, here);

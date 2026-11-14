@@ -28,5 +28,5 @@
   "CategoryTags": [
     "utility"
   ],
-  "Changelog": "No more half-second wait after the map opens: a press now counts right away (open a quest's map and press at once to go there). Only the press that opened the map, if it's still held when the map appears, is ignored until you let go."
+  "Changelog": "No more half-second wait after the map opens: a press now counts right away (open a quest's map and press at once to go there); only the press that opened the map, if it's still held when the map appears, is ignored until you let go. Pressing again for the destination you're already heading to changes nothing (no restarted trip, no \"the game refused to teleport\" lines); a different destination always replaces the trip, even while its teleport is being cast."
 }
