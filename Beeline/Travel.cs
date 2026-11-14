@@ -509,7 +509,7 @@ internal sealed unsafe class Travel : IDisposable
                      && NearestShard(places, place.Group, current, here, ui, exceptId: place.Id) is { Position: { } nearPos } near)
             {
                 var id = place.Id;
-                var walk = LegSeconds(Vector2.Distance(here, nearPos), current, mounted) + 1.5f; // + reaching it / opening the menu
+                var walk = LegSeconds(Vector2.Distance(here, nearPos), current, mounted) + 0.5f; // + stopping at it (the menu is in the aethernet time)
                 routes.Add(new Route(walk + Config.AethernetSeconds + rest, $"walk to {near.Name} and take the aethernet to {name}", null, () =>
                 {
                     _preShard = near;
